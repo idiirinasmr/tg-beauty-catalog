@@ -73,8 +73,23 @@
 </head>
 <body>
 
+    <!-- ===== ЭКРАН 0: ОНБОРДИНГ ===== -->
+    <div id="screen-onboarding" class="screen active">
+        <div class="onboarding-content">
+            <div class="onboarding-emoji">💅</div>
+            <h1 class="onboarding-title" id="onboarding-title">Привет!</h1>
+            <p class="onboarding-text">Здесь вы можете:</p>
+            <ul class="onboarding-list">
+                <li>Посмотреть услуги и цены</li>
+                <li>Записаться к мастеру в пару нажатий</li>
+                <li>Получить скидку на первую запись</li>
+            </ul>
+            <button class="onboarding-btn" id="onboarding-start">Начать</button>
+        </div>
+    </div>
+
     <!-- ===== ЭКРАН 1: КАТАЛОГ ===== -->
-    <div id="screen-catalog" class="screen active">
+    <div id="screen-catalog" class="screen">
 
         <!-- Профиль мастера -->
         <div class="profile">
@@ -267,6 +282,29 @@
             <p class="success-text">
                 Мастер <strong>Анна</strong> получила вашу заявку и&nbsp;ответит в&nbsp;течение 15&nbsp;минут
             </p>
+
+            <button class="share-btn" id="btn-share">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M13.5 6a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5zM4.5 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5zM13.5 16.5a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5zM6.44 10.24l5.13 2.77M11.56 5l-5.12 2.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Поделиться с другом
+            </button>
+        </div>
+    </div>
+
+    <!-- ===== МОДАЛКА-ОФФЕР (первый визит) ===== -->
+    <div id="offer-overlay" class="offer-overlay">
+        <div class="offer-card">
+            <div class="offer-emoji">🎁</div>
+            <h2 class="offer-title">Скидка 15% на первую запись</h2>
+            <p class="offer-subtitle">Подпишитесь на бота — получите промокод в&nbsp;личное сообщение</p>
+            <ul class="offer-bullets">
+                <li>Напомним о записи за день</li>
+                <li>Первыми узнаёте о свободных окошках</li>
+                <li>Эксклюзивные акции для подписчиков</li>
+            </ul>
+            <a href="https://t.me/Krasa555bot?start=from_app" class="offer-btn" id="offer-btn">Получить скидку 15%</a>
+            <button class="offer-skip" id="offer-skip">Пропустить</button>
         </div>
     </div>
 

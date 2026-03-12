@@ -80,7 +80,7 @@ const portfolio = [
 
 // --- Состояние приложения ---
 let selectedService = null;
-let currentScreen = 'catalog';
+let currentScreen = 'onboarding';
 
 // --- Навигация между экранами ---
 
@@ -110,6 +110,11 @@ function updateTelegramButtons(screenName) {
     backBtn.offClick(onBackButtonClick);
 
     switch (screenName) {
+        case 'onboarding':
+            mainBtn.hide();
+            backBtn.hide();
+            break;
+
         case 'catalog':
             mainBtn.hide();
             backBtn.hide();
@@ -325,12 +330,47 @@ document.querySelectorAll('.nav-back').forEach(btn => {
     });
 });
 
+// --- Онбординг (приветствие по имени) ---
+
+function initOnboarding() {
+    // Показываем один раз
+    if (localStorage.getItem('onboarding_done')) {
+        showScreen('catalog');
+        return;
+    }
+
+    // Персональное приветствие
+    const user = tg.initDataUnsafe?.user;
+    const name = user?.first_name || '';
+    const title = document.getElementById('onboarding-title');
+    title.textContent = name ? 'Привет, ' + name + '!' : 'Привет!';
+
+    document.getElementById('onboarding-start').addEventListener('click', () => {
+        haptic('impact', 'light');
+        localStorage.setItem('onboarding_done', '1');
+        showScreen('catalog');
+    });
+
+    showScreen('onboarding');
+}
+
+// --- Кнопка «Поделиться с другом» ---
+
+document.getElementById('btn-share')?.addEventListener('click', () => {
+    haptic('selection');
+    const shareText = 'Записывайся на маникюр к мастеру Анне — удобно прямо в Telegram!';
+    const shareUrl = 'https://t.me/Krasa555bot';
+
+    if (tg.openTelegramLink) {
+        tg.openTelegramLink('https://t.me/share/url?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(shareText));
+    } else {
+        window.open('https://t.me/share/url?url=' + encodeURIComponent(shareUrl) + '&text=' + encodeURIComponent(shareText));
+    }
+});
+
 // --- Модалка-оффер (первый визит) ---
 
 function initOffer() {
-    if (new URLSearchParams(window.location.search).has('reset')) {
-        localStorage.removeItem('offer_shown');
-    }
     if (localStorage.getItem('offer_shown')) return;
 
     const overlay = document.getElementById('offer-overlay');
@@ -371,8 +411,14 @@ function initOffer() {
 
 // --- Инициализация ---
 
+// Сброс для тестирования (?reset в URL)
+if (new URLSearchParams(window.location.search).has('reset')) {
+    localStorage.removeItem('onboarding_done');
+    localStorage.removeItem('offer_shown');
+}
+
 renderPortfolio();
 renderServicesList();
 initReviewsNav();
-showScreen('catalog');
+initOnboarding();
 initOffer();
