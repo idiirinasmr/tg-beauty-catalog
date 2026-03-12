@@ -328,6 +328,9 @@ document.querySelectorAll('.nav-back').forEach(btn => {
 // --- Модалка-оффер (первый визит) ---
 
 function initOffer() {
+    if (new URLSearchParams(window.location.search).has('reset')) {
+        localStorage.removeItem('offer_shown');
+    }
     if (localStorage.getItem('offer_shown')) return;
 
     const overlay = document.getElementById('offer-overlay');
