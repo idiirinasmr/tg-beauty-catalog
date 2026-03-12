@@ -325,9 +325,51 @@ document.querySelectorAll('.nav-back').forEach(btn => {
     });
 });
 
+// --- Модалка-оффер (первый визит) ---
+
+function initOffer() {
+    if (localStorage.getItem('offer_shown')) return;
+
+    const overlay = document.getElementById('offer-overlay');
+    const btnOffer = document.getElementById('offer-btn');
+    const btnSkip = document.getElementById('offer-skip');
+
+    overlay.classList.add('active');
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            overlay.classList.add('visible');
+        });
+    });
+
+    function closeOffer() {
+        localStorage.setItem('offer_shown', '1');
+        overlay.classList.remove('visible');
+        setTimeout(() => {
+            overlay.classList.remove('active');
+        }, 300);
+    }
+
+    btnOffer.addEventListener('click', () => {
+        haptic('impact', 'light');
+        closeOffer();
+    });
+
+    btnSkip.addEventListener('click', () => {
+        haptic('selection');
+        closeOffer();
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            closeOffer();
+        }
+    });
+}
+
 // --- Инициализация ---
 
 renderPortfolio();
 renderServicesList();
 initReviewsNav();
 showScreen('catalog');
+initOffer();

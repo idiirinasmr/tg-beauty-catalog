@@ -612,6 +612,142 @@ body {
 }
 
 /* ===========================
+   МОДАЛКА-ОФФЕР (первый визит)
+   =========================== */
+
+.offer-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.offer-overlay.active {
+    display: flex;
+}
+
+.offer-overlay.visible {
+    opacity: 1;
+}
+
+.offer-card {
+    background: var(--tg-theme-bg-color, #ffffff);
+    border-radius: 20px;
+    padding: 32px 24px 24px;
+    width: 100%;
+    max-width: 360px;
+    text-align: center;
+    transform: translateY(30px) scale(0.95);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.offer-overlay.visible .offer-card {
+    transform: translateY(0) scale(1);
+}
+
+.offer-emoji {
+    font-size: 56px;
+    line-height: 1;
+    margin-bottom: 16px;
+}
+
+.offer-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--tg-theme-text-color, #000000);
+    margin-bottom: 8px;
+    line-height: 1.25;
+}
+
+.offer-subtitle {
+    font-size: 15px;
+    line-height: 1.45;
+    color: var(--tg-theme-hint-color, #999999);
+    margin-bottom: 20px;
+}
+
+.offer-bullets {
+    list-style: none;
+    text-align: left;
+    margin-bottom: 24px;
+}
+
+.offer-bullets li {
+    position: relative;
+    padding-left: 20px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--tg-theme-text-color, #000000);
+    margin-bottom: 8px;
+}
+
+.offer-bullets li:last-child {
+    margin-bottom: 0;
+}
+
+.offer-bullets li::before {
+    content: '•';
+    position: absolute;
+    left: 4px;
+    color: #2AABEE;
+    font-weight: 700;
+}
+
+.offer-btn {
+    display: block;
+    width: 100%;
+    padding: 14px 24px;
+    background: #2AABEE;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 600;
+    font-family: inherit;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    text-decoration: none;
+    text-align: center;
+    min-height: 48px;
+    line-height: 1.25;
+    transition: background 0.15s ease, transform 0.15s ease;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.offer-btn:active {
+    background: #1E96D1;
+    transform: scale(0.97);
+}
+
+.offer-skip {
+    display: inline-block;
+    margin-top: 14px;
+    background: none;
+    border: none;
+    color: var(--tg-theme-hint-color, #999999);
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 8px 16px;
+    transition: opacity 0.15s ease;
+    -webkit-user-select: none;
+    user-select: none;
+}
+
+.offer-skip:active {
+    opacity: 0.5;
+}
+
+/* ===========================
    АДАПТАЦИЯ ПОД РАЗМЕРЫ
    =========================== */
 
