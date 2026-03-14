@@ -468,10 +468,10 @@ tg-beauty-catalog/
 
 ```
 # Supabase
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_ANON_KEY=xxx
-SUPABASE_SERVICE_KEY=xxx
-DATABASE_URL=postgresql://xxx
+SUPABASE_URL=https://gfylphystvksjlfwqnbp.supabase.co
+SUPABASE_ANON_KEY=sb_publishable_HGVrHJPcisV2HQlDvsZkBA_AwNPG2_c
+SUPABASE_SERVICE_KEY=xxx           # НЕ коммитить! Взять из Supabase Dashboard -> Settings -> API
+DATABASE_URL=postgresql://xxx       # Взять из Supabase Dashboard -> Settings -> Database
 
 # JWT
 JWT_SECRET=xxx
