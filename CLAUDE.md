@@ -1,112 +1,102 @@
-# Telegram Mini App — Каталог услуг бьюти-мастера
+# BeautyApp — SaaS-платформа для бьюти-мастеров в Telegram
+
+У каждого мастера свой Telegram-бот и каталог (Mini App). Один сервер обслуживает всех мастеров,
+и каждый видит только своё. Архитектура: [docs/BACKEND-PLAN.md](docs/BACKEND-PLAN.md).
+Принятые решения и отступления от плана: [docs/DECISIONS.md](docs/DECISIONS.md).
+История работ: [WORK-LOG.md](WORK-LOG.md).
 
 ## Структура проекта
 
 ```
 tg-beauty-catalog/
-├── CLAUDE.md           ← Этот файл: документация проекта
-├── research.md         ← Исследование ниши и экспертная оценка
-├── brief.md            ← Детальный план: экраны, элементы, переходы
-└── tg-app/             ← Telegram Mini App (фронтенд)
-    ├── index.html      ← Точка входа. Все 4 экрана в одном файле
-    ├── style.css       ← Стили. CSS-переменные Telegram для тем
-    ├── app.js          ← Логика: навигация, MainButton, sendData
-    └── img/            ← Папка для фото услуг (пока пустая)
+├── CLAUDE.md             ← этот файл
+├── WORK-LOG.md           ← журнал работ (обновлять после каждого этапа)
+├── research.md, brief.md ← исследование ниши и ТЗ первой версии
+├── docs/
+│   ├── BACKEND-PLAN.md   ← архитектура SaaS (утверждена)
+│   ├── BACKEND-QUESTIONS.md
+│   └── DECISIONS.md      ← решения совета, дизайн, отступления от плана
+├── tg-app/               ← Mini App каталога для клиентов
+├── admin/                ← панель мастера
+├── platform-admin/       ← панель владельца платформы
+├── server/               ← API + боты + cron (Node.js), инструкция: server/README.md
+└── bot/setup.js          ← настройка демо-бота первой версии (@Krasa555bot)
 ```
 
-## Файлы и за что отвечают
+## server/ — бэкенд
 
-### tg-app/index.html
-Все 4 экрана приложения как div-секции с классом `.screen`:
-- `#screen-catalog` — главный экран, сетка карточек услуг
-- `#screen-detail` — детали услуги (фото, описание, цена)
-- `#screen-confirm` — подтверждение записи (сводка)
-- `#screen-success` — экран успеха (анимированная галочка)
+Fastify + Prisma (Postgres/Supabase) + grammy. Один процесс: API, раздача фронтендов, все боты, cron.
 
-### tg-app/style.css
-Стили используют CSS-переменные Telegram (`--tg-theme-*`).
-Автоматическая поддержка светлой и тёмной темы.
-Адаптация под экраны 320–430px.
+| Папка/файл | За что отвечает |
+|---|---|
+| `src/index.js` | точка входа, плагины, CSP, раздача `/app/` `/admin/` `/platform/`, вебхуки `/bot/:hookId`, cron |
+| `src/config.js` | все переменные окружения (`server/.env`, образец `.env.example`) |
+| `src/prisma/schema.prisma` | схема БД: masters, services, portfolio, bookings, reviews, faq, broadcasts, broadcast_recipients, clients, payments, backup_log |
+| `src/routes/` | `auth` (вход), `catalog` + `booking` (публичное API Mini App), `master` (API панели), `payment`, `admin` |
+| `src/middleware/` | `auth.js` (JWT, роли), `plan-check.js` (лимиты Free/Pro) |
+| `src/services/bot-manager.js` | запуск/остановка ботов, webhook/polling, кнопка меню |
+| `src/services/bot-handlers.js` | бот-консультант: /start, FAQ, пересылка вопросов мастеру, отзывы |
+| `src/services/admin-bot.js` | бот владельца: уведомления, команды, отчёт 21:00 |
+| `src/services/reminder.js` | напоминания за 24 и 2 часа, запрос отзыва |
+| `src/services/payment.js` | Pro: активация, ЮKassa, просрочка подписок |
+| `src/utils/encrypt.js` | AES-256-GCM для токенов ботов (ключ в файле, не в .env) |
+| `src/utils/queue.js` | очередь сообщений в памяти, 20 сообщений в секунду на бота |
+| `scripts/` | `dev-db.js` (локальная БД), `generate-key.js`, `backup.sh` |
+| `deploy/` | systemd-юнит и конфиг nginx |
+| `test/` | интеграционные тесты (`npm test`, нужна запущенная dev-db) |
 
-### tg-app/app.js
-Вся логика приложения:
-- **Массив `services`** (строка ~30) — данные об услугах. **Здесь менять услуги, цены, описания.**
-- **Объект `master`** (строка ~20) — имя и специализация мастера. **Здесь менять данные мастера.**
-- **`showScreen()`** — переключение экранов (show/hide div)
-- **`updateTelegramButtons()`** — настройка MainButton/BackButton для каждого экрана
-- **`sendBookingData()`** — отправка данных в бота через `sendData()`
-- **`renderCatalog()`** — генерация карточек из массива `services`
+### Правила безопасности (не нарушать)
+- **Изоляция.** Каждая выборка в API мастера фильтруется по `request.master.id` (`findOwned`).
+- **Тело запроса.** У каждой схемы, которая пишет в БД, стоит `additionalProperties: false`, иначе мастер выдаст себе Pro.
+- **Токен бота** никогда не попадает в ответы API (`profileView`, `omit`).
+- **Вход через initData бота мастера** даёт JWT с `src: 'masterbot'`: только для владельца этого бота и никогда для админа.
+- **HTML.** Пользовательский текст в сообщениях бота с `parse_mode: 'HTML'` проходит через `escapeHtml`, во фронтендах — через `esc()` перед `innerHTML`.
+- **Вебхук ЮKassa.** Его телу не доверять: статус платежа перепроверяется через API.
 
-## Навигация между экранами
+## Фронтенды
 
-```
-[Каталог] ──(нажатие на карточку)──→ [Детали]
-                                        │
-                              [BackButton] ←──┘
-                                        │
-                    [MainButton «Записаться»] ──→ [Подтверждение]
-                                                      │
-                                        [BackButton] ←──┘
-                                                      │
-                              [MainButton «Подтвердить запись»]
-                                                      │
-                                              sendData() → бот
-                                                      │
-                                                  [Успех]
-                                                      │
-                                        [MainButton «Закрыть»]
-                                                      │
-                                                  close()
-```
+Без фреймворков: чистый HTML, CSS и JS. **CSP строгий:** никаких inline-скриптов и `onclick=`.
+События вешаются через `data-action` и делегирование.
 
-## Где менять данные
+### tg-app/ — каталог для клиентов
+- **С `?bot=USERNAME`.** Данные берутся из `GET /api/catalog/:bot`, запись идёт через `POST /api/booking` с `tg.initData`.
+- **Без параметра.** Демо-режим с данными из объекта `DEMO` в `app.js`. На нём работает GitHub Pages: https://idiirinasmr.github.io/tg-beauty-catalog/
+- **Оформление.** Следует теме Telegram (`--tg-theme-*`), у Pro-мастера накладываются его цвета.
+- `tg-stub.js` — заглушка Telegram для обычного браузера.
 
-### Услуги
-Файл: `tg-app/app.js`, массив `services` (~строка 30).
-Каждая услуга:
-```javascript
-{
-    id: 1,              // уникальный ID
-    name: 'Маникюр',    // название
-    description: '...',  // описание (2-4 предложения)
-    price: 1500,         // цена в рублях (число)
-    duration: 60,        // длительность в минутах
-    emoji: '💅'          // эмодзи для карточки (пока нет фото)
-}
-```
+### admin/ — панель мастера
+- **Вход.** Telegram Login Widget в режиме redirect, initData из бота мастера (`?bot=`) или dev-вход.
+- **Навигация** по `#hash`: home, bookings, services, profile, bot, faq, reviews, clients, broadcast, design, plan, more.
+- **Дизайн:** тёплый «салонный», всегда фирменный, без цветов Telegram. Токены в `admin/style.css`, шрифты Fraunces + Manrope, иконки из `admin/icons.svg`.
 
-### Мастер
-Файл: `tg-app/app.js`, объект `master` (~строка 20).
-А также в `index.html` — тексты на экранах подтверждения и успеха.
+### platform-admin/ — панель владельца
+Использует `/admin/style.css`. Доступ только для `ADMIN_TELEGRAM_IDS`.
 
-### Фото
-Заменить эмодзи на реальные фото:
-1. Положить фото в `tg-app/img/`
-2. В массиве `services` добавить поле `image: 'img/manicure.jpg'`
-3. В `renderCatalog()` и `fillDetailScreen()` — заменить emoji на `<img>`
+## Как запустить локально
 
-## Как запустить
-
-### Локально (для тестирования)
 ```bash
-cd tg-app
-python -m http.server 8080
-# или
-npx serve .
+cd server
+node scripts/dev-db.js     # локальная БД PGlite на 127.0.0.1:54329, держать открытой
+npm run dev                # http://localhost:3000/admin/  (DEV_LOGIN=1: вход по Telegram ID)
+npm test                   # 25 тестов
 ```
-Открыть http://localhost:8080 в браузере.
+Первичная настройка (`.env`, ключ, миграции) и деплой на VPS описаны в [server/README.md](server/README.md).
 
-### В Telegram (продакшен)
-1. Захостить `tg-app/` на GitHub Pages / Vercel / Netlify (нужен HTTPS)
-2. Создать бота через @BotFather
-3. Настроить Menu Button → URL Mini App
-4. Написать бота (bot.py), который обрабатывает `web_app_data`
+**Особенность этого компьютера.** embedded-postgres не работает из-за кириллицы в имени пользователя Windows,
+поэтому используется PGlite. В `DATABASE_URL` обязателен `pgbouncer=true`: у PGlite одна сессия на все подключения.
 
-## Технические детали
+## Тарифы
 
-- **Без фреймворков** — чистый HTML + CSS + JS
-- **Telegram Web App SDK** — подключается через `<script>` в index.html
-- **Переключение экранов** — show/hide div (не SPA-роутер)
-- **Анимации** — CSS transitions 250ms (opacity + translateY)
-- **Тап-зоны** — минимум 44px
-- **Шрифт** — системный (-apple-system, Segoe UI, Roboto)
+| | Free | Pro (500 ₽ / 30 дней) |
+|---|---|---|
+| Услуги / фото / FAQ | 5 / 6 / 10 | без лимита |
+| Свой бот, заявки | ✓ | ✓ |
+| Напоминания, рассылки, база клиентов | — | ✓ |
+| Логотип, цвет, название, без логотипа BeautyApp | — | ✓ |
+
+Лимиты задаются в `server/src/config.js` (`freeLimits`). Когда Pro заканчивается, данные не удаляются: каталог просто показывает первые 5 услуг и 6 фото.
+
+## Статус (26.10.2026)
+
+Все 8 этапов плана реализованы в ветке `feature/saas-platform`. Она не смёржена и не запушена.
+Для деплоя от владельца нужны: пароль БД и service_role ключ Supabase, VPS, домен, бот владельца, магазин ЮKassa.
