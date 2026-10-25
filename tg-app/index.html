@@ -4,71 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Каталог услуг</title>
+    <link rel="icon" href="data:,">
     <!-- Telegram Web App SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <!-- Заглушка для тестирования в обычном браузере -->
-    <script>
-    if (!window.Telegram || !window.Telegram.WebApp) {
-        window.Telegram = {
-            WebApp: {
-                ready: function() {},
-                expand: function() {},
-                close: function() { alert('Приложение закрыто (тестовый режим)'); },
-                sendData: function(data) { console.log('sendData:', data); },
-                MainButton: {
-                    text: '', isVisible: false,
-                    setText: function(t) { this.text = t; this._updateDOM(); },
-                    show: function() { this.isVisible = true; this._updateDOM(); },
-                    hide: function() { this.isVisible = false; this._updateDOM(); },
-                    onClick: function(cb) { this._cb = cb; },
-                    offClick: function() { this._cb = null; },
-                    showProgress: function() {},
-                    hideProgress: function() {},
-                    _cb: null,
-                    _updateDOM: function() {
-                        let btn = document.getElementById('__tg_main_btn');
-                        if (!btn) {
-                            btn = document.createElement('div');
-                            btn.id = '__tg_main_btn';
-                            btn.style.cssText = 'position:fixed;bottom:0;left:0;right:0;height:56px;background:#2AABEE;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;cursor:pointer;z-index:9999;font-family:inherit;';
-                            btn.addEventListener('click', () => { if (this._cb) this._cb(); });
-                            document.body.appendChild(btn);
-                        }
-                        btn.textContent = this.text;
-                        btn.style.display = this.isVisible ? 'flex' : 'none';
-                    }
-                },
-                BackButton: {
-                    isVisible: false,
-                    show: function() { this.isVisible = true; this._updateDOM(); },
-                    hide: function() { this.isVisible = false; this._updateDOM(); },
-                    onClick: function(cb) { this._cb = cb; },
-                    offClick: function() { this._cb = null; },
-                    _cb: null,
-                    _updateDOM: function() {
-                        let btn = document.getElementById('__tg_back_btn');
-                        if (!btn) {
-                            btn = document.createElement('div');
-                            btn.id = '__tg_back_btn';
-                            btn.style.cssText = 'position:fixed;top:0;left:0;width:56px;height:56px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:9999;font-size:24px;color:#2AABEE;';
-                            btn.innerHTML = '←';
-                            btn.addEventListener('click', () => { if (this._cb) this._cb(); });
-                            document.body.appendChild(btn);
-                        }
-                        btn.style.display = this.isVisible ? 'flex' : 'none';
-                    }
-                },
-                HapticFeedback: {
-                    impactOccurred: function() {},
-                    notificationOccurred: function() {},
-                    selectionChanged: function() {}
-                },
-                initDataUnsafe: { user: { first_name: 'Тест', id: 123, username: 'test' } },
-                themeParams: {}
-            }
-        };
-    }
-    </script>
+    <script src="tg-stub.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -79,7 +19,7 @@
             <div class="onboarding-emoji">💅</div>
             <h1 class="onboarding-title" id="onboarding-title">Привет!</h1>
             <p class="onboarding-text">Здесь вы можете:</p>
-            <ul class="onboarding-list">
+            <ul class="onboarding-list" id="onboarding-list">
                 <li>Посмотреть услуги и цены</li>
                 <li>Записаться к мастеру в пару нажатий</li>
                 <li>Получить скидку на первую запись</li>
@@ -93,16 +33,18 @@
 
         <!-- Профиль мастера -->
         <div class="profile">
+            <img class="profile-logo" id="master-logo" alt="" hidden>
             <div class="profile-avatar" id="master-avatar">АИ</div>
-            <div class="profile-name">Анна Иванова</div>
-            <div class="profile-specialty">Маникюр, педикюр · 5 лет</div>
-            <div class="profile-address">
+            <div class="profile-name" id="master-name">Анна Иванова</div>
+            <div class="profile-specialty" id="master-specialty">Маникюр, педикюр · 5 лет</div>
+            <div class="profile-address" id="master-address-row">
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                     <path d="M7 1C4.79 1 3 2.79 3 5c0 3.13 4 7.5 4 7.5s4-4.37 4-7.5C11 2.79 9.21 1 7 1zm0 5.5A1.5 1.5 0 1 1 7 3.5a1.5 1.5 0 0 1 0 3z" fill="#E8A0BF"/>
                 </svg>
-                ул. Тверская, 15, оф.3
+                <span id="master-address">ул. Тверская, 15, оф.3</span>
             </div>
-            <div class="profile-stats">247 записей · Ближайшее: завтра, 10:00</div>
+            <div class="profile-stats" id="master-stats">247 записей · Ближайшее: завтра, 10:00</div>
+            <p class="profile-about" id="master-about" hidden></p>
 
             <!-- Кнопки действий -->
             <div class="profile-actions">
@@ -122,7 +64,7 @@
         </div>
 
         <!-- Работы (портфолио) -->
-        <div class="section">
+        <div class="section" id="section-portfolio">
             <div class="section-title">Работы</div>
             <div class="portfolio-grid" id="portfolio-grid">
                 <!-- Генерируется из app.js -->
@@ -130,9 +72,9 @@
         </div>
 
         <!-- Отзывы -->
-        <div class="section">
+        <div class="section" id="section-reviews">
             <div class="section-header">
-                <div class="section-title">Отзывы</div>
+                <div class="section-title" id="reviews-title">Отзывы</div>
                 <div class="reviews-nav">
                     <button class="reviews-arrow reviews-arrow-left" id="reviews-left" aria-label="Назад">
                         <svg width="7" height="12" viewBox="0 0 7 12" fill="none">
@@ -147,27 +89,7 @@
                 </div>
             </div>
             <div class="reviews-list" id="reviews-list">
-                <div class="review-item">
-                    <div class="review-header">
-                        <span class="review-name">Мария</span>
-                        <span class="review-stars">★★★★★</span>
-                    </div>
-                    <p class="review-text">Делала маникюр у Анны — результат идеальный! Покрытие держится уже 3 недели без сколов. Обязательно приду ещё 💅</p>
-                </div>
-                <div class="review-item">
-                    <div class="review-header">
-                        <span class="review-name">Екатерина</span>
-                        <span class="review-stars">★★★★★</span>
-                    </div>
-                    <p class="review-text">Наращивание получилось очень аккуратное и естественное. Анна внимательно выслушала пожелания и сделала именно то, что хотела ✨</p>
-                </div>
-                <div class="review-item">
-                    <div class="review-header">
-                        <span class="review-name">Ольга</span>
-                        <span class="review-stars">★★★★★</span>
-                    </div>
-                    <p class="review-text">Хожу на педикюр регулярно. Всегда чисто, аккуратно и приятная атмосфера. Рекомендую всем подругам!</p>
-                </div>
+                <!-- Генерируется из app.js -->
             </div>
         </div>
 
@@ -177,6 +99,18 @@
             <div class="services-list" id="services-list">
                 <!-- Генерируется из app.js -->
             </div>
+        </div>
+
+        <div class="powered-by" id="powered-by" hidden>Сделано на BeautyApp</div>
+    </div>
+
+    <!-- ===== Ошибка загрузки каталога ===== -->
+    <div id="screen-error" class="screen">
+        <div class="onboarding-content">
+            <div class="onboarding-emoji">😔</div>
+            <h1 class="onboarding-title">Не удалось загрузить каталог</h1>
+            <p class="onboarding-text" id="error-text">Проверьте интернет и попробуйте ещё раз</p>
+            <button class="onboarding-btn" id="error-retry">Повторить</button>
         </div>
     </div>
 
@@ -279,7 +213,7 @@
             </div>
 
             <h2 class="success-title">Заявка отправлена!</h2>
-            <p class="success-text">
+            <p class="success-text" id="success-text">
                 Мастер <strong>Анна</strong> получила вашу заявку и&nbsp;ответит в&nbsp;течение 15&nbsp;минут
             </p>
 

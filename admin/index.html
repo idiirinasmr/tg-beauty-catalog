@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Панель мастера — BeautyApp</title>
+    <meta name="description" content="Услуги, заявки, клиенты и бот-консультант бьюти-мастера в одном месте.">
+    <meta name="theme-color" content="#FAF6F1">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Загрузка -->
+    <div id="view-boot" class="boot">
+        <div class="boot-mark">B</div>
+    </div>
+
+    <!-- Вход -->
+    <section id="view-login" class="auth" hidden>
+        <div class="auth-card fade-up">
+            <div class="brand"><span class="brand-mark">B</span> BeautyApp</div>
+            <h1 class="auth-title">Ваш салон —<br><em>в Telegram</em></h1>
+            <p class="auth-sub">Каталог услуг, онлайн-запись и бот, который отвечает клиентам, пока вы работаете.</p>
+            <div id="login-widget" class="login-widget"></div>
+            <p class="auth-hint" id="login-hint">Войдите через Telegram — пароль не нужен.</p>
+            <form id="dev-login" class="dev-login" hidden>
+                <p class="auth-hint">Локальная разработка: вход без Telegram</p>
+                <div class="row">
+                    <input class="input" name="id" inputmode="numeric" placeholder="Telegram ID" value="1001" required>
+                    <button class="btn btn-primary" type="submit">Войти</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <!-- Регистрация -->
+    <section id="view-register" class="auth" hidden>
+        <form id="register-form" class="auth-card fade-up">
+            <div class="brand"><span class="brand-mark">B</span> BeautyApp</div>
+            <h1 class="auth-title">Расскажите<br><em>о себе</em></h1>
+            <p class="auth-sub">Это увидят клиенты в каталоге. Всё можно поменять потом.</p>
+            <label class="field"><span>Как вас зовут *</span>
+                <input class="input" name="name" required maxlength="100" placeholder="Анна Иванова" autocomplete="name"></label>
+            <label class="field"><span>Специализация</span>
+                <input class="input" name="specialty" maxlength="150" placeholder="Маникюр, педикюр · 5 лет"></label>
+            <label class="field"><span>Телефон</span>
+                <input class="input" name="phone" type="tel" maxlength="30" placeholder="+7 900 000-00-00" autocomplete="tel"></label>
+            <label class="field"><span>Email — чтобы восстановить доступ</span>
+                <input class="input" name="email" type="email" maxlength="120" placeholder="you@mail.ru" autocomplete="email"></label>
+            <label class="field"><span>Адрес</span>
+                <input class="input" name="address" maxlength="200" placeholder="ул. Тверская, 15, оф. 3"></label>
+            <button class="btn btn-primary btn-block" type="submit">Создать мой каталог</button>
+            <p class="auth-hint">Бесплатно: 5 услуг, 6 фото работ, приём заявок без ограничений.</p>
+        </form>
+    </section>
+
+    <!-- Приложение -->
+    <div id="view-app" class="shell" hidden>
+        <aside class="sidebar">
+            <div class="brand"><span class="brand-mark">B</span> BeautyApp</div>
+            <nav class="nav" id="nav"></nav>
+            <button class="nav-item nav-logout" data-action="logout">
+                <svg class="i"><use href="icons.svg#logout"/></svg><span>Выйти</span>
+            </button>
+        </aside>
+
+        <div class="main-wrap">
+            <header class="topbar">
+                <div class="topbar-who">
+                    <div class="avatar sm" id="top-avatar"></div>
+                    <div>
+                        <div class="topbar-name" id="top-name"></div>
+                        <div class="topbar-plan" id="top-plan"></div>
+                    </div>
+                </div>
+                <a class="btn btn-ghost btn-sm" id="top-catalog" target="_blank" rel="noopener" hidden>
+                    <svg class="i"><use href="icons.svg#external"/></svg><span>Мой каталог</span>
+                </a>
+            </header>
+            <main id="main" class="main"></main>
+        </div>
+
+        <nav class="tabbar" id="tabbar"></nav>
+    </div>
+
+    <!-- Модальное окно (содержимое рисует admin.js) -->
+    <dialog id="modal" class="modal"><div id="modal-body"></div></dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="admin.js"></script>
+</body>
+</html>
