@@ -66,7 +66,7 @@ module.exports = async function masterRoutes(app) {
 
     app.post('/api/master/register', {
         preHandler: requireTelegramUser,
-        schema: { body: { type: 'object', required: ['name'], properties: profileProps } }
+        schema: { body: { type: 'object', required: ['name'], properties: profileProps, additionalProperties: false } }
     }, async (request, reply) => {
         const telegramId = BigInt(request.user.tg);
         if (await prisma.master.findUnique({ where: { telegramId } })) {
@@ -260,26 +260,35 @@ module.exports = async function masterRoutes(app) {
             const booking = await findOwned('booking', request.params.id, request.master.id);
             const { status, appointmentAt } = request.body;
             const data = {};
-            if (status) data.status = status;
-            if (status === 'completed' && booking.status !== 'completed') data.completedAt = new Date();
-            if (appointmentAt !== undefined) {
-                data.appointmentAt = appointmentAt ? new Date(appointmentAt) : null;
+            const statusChanged = status && status !== booking.status;
+            if (statusChanged) data.status = status;
+            if (status === 'completed' && statusChanged) data.completedAt = new Date();
+
+            const newTime = appointmentAt ? new Date(appointmentAt) : null;
+            const timeChanged = appointmentAt !== undefined &&
+                (newTime?.getTime() ?? null) !== (booking.appointmentAt?.getTime() ?? null);
+            if (timeChanged) {
+                data.appointmentAt = newTime;
                 // Время изменилось — напоминания нужно отправить заново
                 data.reminder24hSent = false;
                 data.reminder2hSent = false;
             }
-            if (data.status === 'confirmed' && !(data.appointmentAt ?? booking.appointmentAt)) {
+
+            const finalStatus = data.status ?? booking.status;
+            const finalTime = timeChanged ? newTime : booking.appointmentAt;
+            if (finalStatus === 'confirmed' && !finalTime) {
                 throw httpError(400, 'Укажите дату и время визита');
             }
+            if (!Object.keys(data).length) return booking;
             const updated = await prisma.booking.update({ where: { id: booking.id }, data });
 
-            // Сообщаем клиенту об изменениях
+            // Сообщаем клиенту только о реальных изменениях
             const service = `<b>${escapeHtml(updated.serviceName)}</b>`;
             let text = null;
-            if (updated.status === 'confirmed' && (status === 'confirmed' || appointmentAt)) {
+            if (finalStatus === 'confirmed' && (statusChanged || timeChanged)) {
                 const addr = request.master.address ? `\n📍 ${escapeHtml(request.master.address)}` : '';
                 text = `✅ Запись подтверждена!\n\n${service}\n🗓 ${formatDate(updated.appointmentAt)}${addr}`;
-            } else if (status === 'cancelled' && booking.status !== 'cancelled') {
+            } else if (status === 'cancelled' && statusChanged) {
                 text = `Запись на ${service} отменена. Если хотите выбрать другое время — напишите сюда или откройте каталог: /start`;
             }
             if (text) sendFromMasterBot(request.master.id, updated.clientTelegramId, text, { priority: 'critical' });
@@ -360,11 +369,15 @@ module.exports = async function masterRoutes(app) {
             } else {
                 text = request.body?.text;
             }
-            text = String(text || '').trim();
+            text = escapeHtml(String(text || '').trim());
             if (!text) throw httpError(400, 'Введите текст рассылки');
-            if (text.length > (imageUrl ? 1000 : 4000)) throw httpError(400, 'Слишком длинный текст');
+            // Лимиты Telegram: подпись к фото 1024, сообщение 4096 (считаем после экранирования)
+            if (text.length > (imageUrl ? 1024 : 4096)) {
+                await deleteImage(imageUrl);
+                throw httpError(400, imageUrl ? 'Текст с фото — до ~1000 символов' : 'Текст — до ~4000 символов');
+            }
 
-            const created = await broadcast.createBroadcast(request.master.id, { text: escapeHtml(text), imageUrl });
+            const created = await broadcast.createBroadcast(request.master.id, { text, imageUrl });
             broadcast.run(created.id);
             reply.code(202);
             return created;

@@ -15,7 +15,16 @@ const { miniAppUrl, panelUrl } = require('./bot-manager');
 const pendingReviews = new Map();
 const REVIEW_TEXT_TTL = 60 * 60 * 1000;
 
-const CLIENT_TAG = /#id(\d+)/;
+// Тег клиента стоит в самом начале пересланного вопроса — до имени, которое задаёт сам клиент
+const CLIENT_TAG = /^#id(\d+)\s/;
+
+function rememberPendingReview(key, reviewId) {
+    const now = Date.now();
+    for (const [k, v] of pendingReviews) {
+        if (v.until < now) pendingReviews.delete(k);
+    }
+    pendingReviews.set(key, { reviewId, until: now + REVIEW_TEXT_TTL });
+}
 
 async function upsertClient(masterId, from) {
     return prisma.client.upsert({
@@ -148,7 +157,7 @@ function setupMasterBot(bot, masterId) {
             create: { masterId, bookingId, clientName: booking.clientName, rating: Number(rating) },
             update: { rating: Number(rating) }
         });
-        pendingReviews.set(`${masterId}:${ctx.from.id}`, { reviewId: review.id, until: Date.now() + REVIEW_TEXT_TTL });
+        rememberPendingReview(`${masterId}:${ctx.from.id}`, review.id);
 
         await ctx.answerCallbackQuery({ text: 'Спасибо за оценку!' });
         await ctx.editMessageText(`Ваша оценка: ${'⭐'.repeat(Number(rating))}\n\nНапишите пару слов о визите — мастеру будет приятно. Или /skip, чтобы пропустить.`);
@@ -194,7 +203,7 @@ function setupMasterBot(bot, masterId) {
         const from = ctx.from;
         const who = `${escapeHtml(from.first_name || 'Клиент')}${from.username ? ` (@${escapeHtml(from.username)})` : ''}`;
         const sent = await notifyMaster(ctx.master,
-            `❓ Вопрос от ${who} #id${from.id}\n\n${escapeHtml(text)}\n\n<i>Ответьте на это сообщение (reply) — бот перешлёт ответ клиенту.</i>`);
+            `#id${from.id} ❓ Вопрос от ${who}\n\n${escapeHtml(text)}\n\n<i>Ответьте на это сообщение (reply) — бот перешлёт ответ клиенту.</i>`);
         await ctx.reply(sent
             ? 'Передал ваш вопрос мастеру — ответ придёт сюда же 🙌'
             : 'Мастер скоро ответит. Можно также открыть каталог: /start');

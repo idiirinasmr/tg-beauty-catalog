@@ -40,7 +40,8 @@ module.exports = async function adminRoutes(app) {
             where: { masterId: id, method: 'manual', status: 'pending' },
             orderBy: { createdAt: 'desc' }
         });
-        const { master: updated } = await activatePro(id, { days: request.body.days || 30, paymentId: pending?.id });
+        const { master: updated } = await activatePro(id, { days: request.body.days || 30, paymentId: pending?.id })
+            ?? await activatePro(id, { days: request.body.days || 30 }); // pending уже закрыт параллельно
         const until = updated.planExpiresAt.toLocaleDateString('ru-RU', { timeZone: 'Europe/Moscow' });
         notifyMaster(updated, `🎉 Тариф Pro активирован до ${until}. Спасибо!`);
         const { botToken, ...rest } = updated;

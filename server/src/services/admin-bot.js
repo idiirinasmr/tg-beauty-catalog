@@ -157,7 +157,8 @@ function setupAdminBot(bot) {
             where: { masterId: m.id, method: 'manual', status: 'pending' },
             orderBy: { createdAt: 'desc' }
         });
-        const { master } = await activatePro(m.id, { days, paymentId: pending?.id });
+        const { master } = await activatePro(m.id, { days, paymentId: pending?.id })
+            ?? await activatePro(m.id, { days }); // pending уже закрыт параллельно
         await ctx.reply(`✅ Pro активирован для ${m.name} до ${dateRu(master.planExpiresAt)}`);
         const { notifyMaster } = require('./notify');
         notifyMaster(master, `🎉 Тариф Pro активирован до ${dateRu(master.planExpiresAt)}. Спасибо!`);

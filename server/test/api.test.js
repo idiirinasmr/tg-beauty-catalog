@@ -162,6 +162,54 @@ test('полный сценарий мастер → клиент → владе
         assert.ok(done.body.completedAt);
     });
 
+    await t.test('заявки: повторное сохранение того же времени не сбрасывает напоминания; время нельзя стереть у подтверждённой', async () => {
+        const id = (await prisma.booking.create({
+            data: {
+                masterId: masterA.id, serviceName: 'X', servicePrice: 1, clientTelegramId: 5005n, clientName: 'K',
+                status: 'confirmed', appointmentAt: new Date('2030-01-01T10:00:00Z'), reminder24hSent: true
+            }
+        })).id;
+        const same = await call('PUT', `/api/master/bookings/${id}`, { token: tokenA, body: { appointmentAt: '2030-01-01T10:00:00.000Z' } });
+        assert.strictEqual(same.body.reminder24hSent, true);
+        assert.strictEqual((await call('PUT', `/api/master/bookings/${id}`, { token: tokenA, body: { appointmentAt: null } })).status, 400);
+        await prisma.booking.delete({ where: { id } });
+    });
+
+    await t.test('безопасность: нельзя выдать себе Pro при регистрации', async () => {
+        const tg = await login(4004, 'Хитрая');
+        const res = await call('POST', '/api/master/register', {
+            token: tg, body: { name: 'Хитрая', plan: 'pro', planExpiresAt: '2099-01-01T00:00:00Z' }
+        });
+        // Лишние поля молча отбрасываются схемой (removeAdditional) — тариф остаётся Free
+        assert.strictEqual(res.status, 201);
+        const m = await prisma.master.findUnique({ where: { telegramId: 4004n } });
+        assert.strictEqual(m.plan, 'free');
+        assert.strictEqual(m.planExpiresAt, null);
+        await prisma.master.delete({ where: { id: m.id } });
+    });
+
+    await t.test('безопасность: initData, подписанный ботом мастера, не даёт войти чужим/админом', async () => {
+        const auth = (id) => signInitData({
+            user: JSON.stringify({ id, first_name: 'X' }), auth_date: String(Math.floor(Date.now() / 1000))
+        }, BOT_TOKEN);
+        const asAdmin = await call('POST', '/api/auth/webapp', { body: { initData: auth(Number(ADMIN_ID)), botUsername: 'anna_test_bot' } });
+        assert.strictEqual(asAdmin.status, 403);
+        const asOther = await call('POST', '/api/auth/webapp', { body: { initData: auth(2002), botUsername: 'anna_test_bot' } });
+        assert.strictEqual(asOther.status, 403);
+        const own = await call('POST', '/api/auth/webapp', { body: { initData: auth(1001), botUsername: 'anna_test_bot' } });
+        assert.strictEqual(own.status, 200);
+        assert.strictEqual(own.body.isAdmin, false);
+        assert.strictEqual((await call('GET', '/api/master/profile', { token: own.body.token })).status, 200);
+    });
+
+    await t.test('безопасность: вебхук с неверным секретом — 401, а не 500', async () => {
+        const res = await app.inject({
+            method: 'POST', url: '/bot/unknownhook', payload: { update_id: 1 },
+            headers: { 'x-telegram-bot-api-secret-token': 'ж'.repeat(64) }
+        });
+        assert.strictEqual(res.statusCode, 401);
+    });
+
     await t.test('статистика мастера', async () => {
         const res = await call('GET', '/api/master/stats', { token: tokenA });
         assert.strictEqual(res.body.bookingsTotal, 1);
@@ -198,14 +246,21 @@ test('полный сценарий мастер → клиент → владе
         assert.strictEqual(catalog.body.services.length, 6, '5 + шестая; «Скрытая» неактивна');
     });
 
-    await t.test('напоминание и запрос отзыва помечаются один раз', async () => {
+    await t.test('напоминание и запрос отзыва помечаются один раз', async t2 => {
         const reminder = require('../src/services/reminder');
+        const botManager = require('../src/services/bot-manager');
         await prisma.booking.update({
             where: { id: bookingId },
             data: { status: 'confirmed', appointmentAt: new Date(Date.now() + 3600 * 1000), reminder2hSent: false, reminder24hSent: false }
         });
+        // Бот не запущен — напоминание не теряется, ждёт следующего запуска
         await reminder.sendReminders();
         let b = await prisma.booking.findUnique({ where: { id: bookingId } });
+        assert.ok(!b.reminder2hSent, 'не помечено, пока бот выключен');
+
+        t2.mock.method(botManager, 'isRunning', () => true);
+        await reminder.sendReminders();
+        b = await prisma.booking.findUnique({ where: { id: bookingId } });
         assert.ok(b.reminder2hSent && b.reminder24hSent);
 
         await prisma.booking.update({ where: { id: bookingId }, data: { status: 'completed', completedAt: new Date(Date.now() - 3 * 3600 * 1000) } });

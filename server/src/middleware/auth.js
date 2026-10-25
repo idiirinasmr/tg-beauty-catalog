@@ -42,7 +42,8 @@ function isAdminId(telegramId) {
 /** preHandler: только владелец платформы (ADMIN_TELEGRAM_IDS) */
 async function requireAdmin(request) {
     await verifyJwt(request);
-    if (!isAdminId(request.user.tg)) {
+    // Вход через бота мастера (src = 'masterbot') прав админа не даёт — см. routes/auth.js
+    if (request.user.src !== 'platform' || !isAdminId(request.user.tg)) {
         throw httpError(403, 'Доступ только для администратора платформы');
     }
 }

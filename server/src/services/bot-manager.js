@@ -101,8 +101,9 @@ async function stop(key) {
 /** Вызов из Fastify-маршрута вебхука. Возвращает false, если хук/секрет неверны. */
 function handleWebhook(hookId, secretHeader, update) {
     const entry = hooks.get(hookId);
-    if (!entry || !secretHeader || secretHeader.length !== entry.secret.length ||
-        !crypto.timingSafeEqual(Buffer.from(secretHeader), Buffer.from(entry.secret))) {
+    const given = Buffer.from(String(secretHeader || ''));
+    const expected = Buffer.from(entry?.secret || '');
+    if (!entry || given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
         return false;
     }
     if (entry.seen.includes(update.update_id)) return true; // повтор от Telegram

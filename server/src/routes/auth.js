@@ -11,14 +11,20 @@ const { decrypt } = require('../utils/encrypt');
 const { validateInitData, validateLoginWidget } = require('../utils/telegram-auth');
 const { isAdminId, httpError } = require('../middleware/auth');
 
-async function issueToken(app, tgUser) {
+/**
+ * src — чем подтверждена личность:
+ *  'platform'  — подпись бота владельца (Login Widget / Mini App бота владельца)
+ *  'masterbot' — подпись бота мастера. Токен этого бота знает сам мастер, поэтому
+ *                такой вход годится только для его собственного аккаунта и не даёт прав админа.
+ */
+async function issueToken(app, tgUser, src = 'platform') {
     const tg = String(tgUser.id);
     const master = await prisma.master.findUnique({ where: { telegramId: BigInt(tg) }, select: { id: true } });
-    const token = app.jwt.sign({ tg, mid: master?.id || null }, { expiresIn: '7d' });
+    const token = app.jwt.sign({ tg, mid: master?.id || null, src }, { expiresIn: '7d' });
     return {
         token,
         registered: Boolean(master),
-        isAdmin: isAdminId(tg),
+        isAdmin: src === 'platform' && isAdminId(tg),
         user: { id: tg, firstName: tgUser.first_name || '', username: tgUser.username || null }
     };
 }
@@ -49,14 +55,20 @@ module.exports = async function authRoutes(app) {
         }
     }, async request => {
         const { initData, botUsername } = request.body;
-        let botToken = config.adminBotToken;
-        if (botUsername) {
-            const m = await prisma.master.findUnique({ where: { botUsername }, select: { botToken: true } });
-            botToken = m?.botToken ? decrypt(m.botToken, config.encryptionKey) : null;
+        if (!botUsername) {
+            const data = validateInitData(initData, config.adminBotToken);
+            if (!data) throw httpError(401, 'Подпись Telegram недействительна');
+            return issueToken(app, data.user);
         }
-        const data = validateInitData(initData, botToken);
+
+        // Панель открыта из бота мастера: пускаем только владельца этого бота
+        const m = await prisma.master.findUnique({ where: { botUsername }, select: { botToken: true, telegramId: true } });
+        const data = m?.botToken && validateInitData(initData, decrypt(m.botToken, config.encryptionKey));
         if (!data) throw httpError(401, 'Подпись Telegram недействительна');
-        return issueToken(app, data.user);
+        if (String(data.user.id) !== String(m.telegramId)) {
+            throw httpError(403, 'Панель доступна только мастеру — владельцу этого бота');
+        }
+        return issueToken(app, data.user, 'masterbot');
     });
 
     if (config.devLogin) {

@@ -12,23 +12,30 @@ const PERIOD_DAYS = 30;
 const DAY = 24 * 60 * 60 * 1000;
 const YUKASSA_API = 'https://api.yookassa.ru/v3';
 
-/** Продлить Pro на days дней от max(сейчас, текущая дата окончания) */
-async function activatePro(masterId, { days = PERIOD_DAYS, method = 'manual', amount = config.proPrice, externalId = null, paymentId = null } = {}) {
+/**
+ * Продлить Pro на days дней от max(сейчас, текущая дата окончания).
+ * paymentId — существующий pending-платёж: он помечается paid в той же транзакции.
+ * Если платёж уже обработан (повторный вебхук), возвращает null и ничего не продлевает.
+ */
+async function activatePro(masterId, { days = PERIOD_DAYS, method = 'manual', amount = config.proPrice, paymentId = null } = {}) {
     return prisma.$transaction(async tx => {
         const master = await tx.master.findUniqueOrThrow({ where: { id: masterId } });
         const now = new Date();
         const start = master.plan === 'pro' && master.planExpiresAt > now ? master.planExpiresAt : now;
         const end = new Date(start.getTime() + days * DAY);
+        const paymentData = { status: 'paid', periodStart: start, periodEnd: end, amount };
 
+        if (paymentId) {
+            const claimed = await tx.payment.updateMany({ where: { id: paymentId, status: 'pending' }, data: paymentData });
+            if (!claimed.count) return null;
+        } else {
+            await tx.payment.create({ data: { masterId, method, ...paymentData } });
+        }
         const updated = await tx.master.update({
             where: { id: masterId },
             data: { plan: 'pro', planExpiresAt: end }
         });
-        const paymentData = { status: 'paid', periodStart: start, periodEnd: end, amount };
-        const payment = paymentId
-            ? await tx.payment.update({ where: { id: paymentId }, data: paymentData })
-            : await tx.payment.create({ data: { masterId, method, externalId, ...paymentData } });
-        return { master: updated, payment };
+        return { master: updated };
     });
 }
 
@@ -93,16 +100,11 @@ async function handleYukassaWebhook(body) {
 
     const yk = await yukassaRequest('GET', `/payments/${encodeURIComponent(externalId)}`);
     if (yk.status === 'succeeded' && yk.paid) {
-        // Повторный вебхук не продлит дважды: статус проверяется внутри транзакции
-        const claimed = await prisma.payment.updateMany({
-            where: { id: payment.id, status: 'pending' },
-            data: { status: 'processing' }
-        });
-        if (!claimed.count) return null;
-        const { master } = await activatePro(payment.masterId, {
-            amount: Math.round(Number(yk.amount.value)), paymentId: payment.id
-        });
-        return { activated: true, master, amount: Math.round(Number(yk.amount.value)) };
+        // Повторный вебхук не продлит дважды: activatePro атомарно переводит pending -> paid.
+        // Если транзакция упадёт, платёж останется pending и ЮKassa пришлёт вебхук снова.
+        const amount = Math.round(Number(yk.amount.value));
+        const result = await activatePro(payment.masterId, { amount, paymentId: payment.id });
+        return result && { activated: true, master: result.master, amount };
     }
     if (yk.status === 'canceled') {
         await prisma.payment.update({ where: { id: payment.id }, data: { status: 'failed' } });

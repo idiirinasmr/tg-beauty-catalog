@@ -22,19 +22,16 @@ module.exports = async function paymentRoutes(app) {
         return { url: await payment.createYukassaPayment(request.master) };
     });
 
+    // ЮKassa повторяет уведомление, пока не получит 200 — при сбое отвечаем 500, чтобы был повтор
     app.post('/api/payment/webhook', async request => {
-        try {
-            const result = await payment.handleYukassaWebhook(request.body);
-            if (result?.activated) {
-                const until = result.master.planExpiresAt.toLocaleDateString('ru-RU', { timeZone: config.timezone });
-                const month = await payment.revenue(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
-                notifyAdmin(`💰 Оплата ${result.amount} руб от ${result.master.name} (ЮKassa). Выручка за месяц: ${month} руб`);
-                notifyMaster(result.master, `🎉 Оплата прошла! Тариф Pro активен до ${until}.`);
-            }
-        } catch (err) {
-            request.log.error(err, 'yukassa webhook');
+        const result = await payment.handleYukassaWebhook(request.body);
+        if (result?.activated) {
+            const until = result.master.planExpiresAt.toLocaleDateString('ru-RU', { timeZone: config.timezone });
+            const month = await payment.revenue(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
+            notifyAdmin(`💰 Оплата ${result.amount} руб от ${result.master.name} (ЮKassa). Выручка за месяц: ${month} руб`);
+            notifyMaster(result.master, `🎉 Оплата прошла! Тариф Pro активен до ${until}.`);
         }
-        return { ok: true }; // ЮKassa ждёт 200, иначе будет повторять
+        return { ok: true };
     });
 
     app.post('/api/payment/manual', {
