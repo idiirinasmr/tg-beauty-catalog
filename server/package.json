@@ -1,0 +1,41 @@
+{
+  "name": "beauty-saas-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "API-сервер SaaS-платформы для бьюти-мастеров (Fastify + Prisma + grammy)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "generate-key": "node scripts/generate-key.js",
+    "test": "node --test --test-concurrency=1 test/unit.test.js test/api.test.js"
+  },
+  "prisma": {
+    "schema": "src/prisma/schema.prisma"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.3.1",
+    "@fastify/jwt": "^10.2.5",
+    "@fastify/multipart": "^10.1.6",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fastify/static": "^10.1.7",
+    "@grammyjs/auto-retry": "^2.0.2",
+    "@prisma/client": "^6.19.3",
+    "dotenv": "^16.6.1",
+    "fastify": "^5.12.7",
+    "grammy": "^1.46.0",
+    "node-cron": "^4.6.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.3.16",
+    "@electric-sql/pglite-socket": "^0.0.22",
+    "prisma": "^6.19.3"
+  }
+}
