@@ -134,7 +134,7 @@
 - [x] Бот владельца @Krasadminbot + Telegram ID владельца (27.10.2026)
 - [x] Деплой на Vercel: https://krasa-platform.vercel.app (27.10.2026)
 - [x] Токен доступа Supabase `claude.` удалён (проверено: API отвечает 401)
-- [ ] @BotFather → `/setdomain` → @Krasadminbot → `krasa-platform.vercel.app` (владелец) — без этого не работает кнопка входа на сайте
+- [x] @BotFather → `/setdomain` → @Krasadminbot → `krasa-platform.vercel.app` (27.10.2026)
 - [ ] Реквизиты для оплаты переводом (`MANUAL_PAYMENT_DETAILS` в Vercel) — сейчас заглушка
 - [ ] Stripe (для зарубежных мастеров)
 - [ ] Юридическое: оператор ПДн по 152-ФЗ, оферта, политика конфиденциальности
