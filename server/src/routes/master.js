@@ -45,7 +45,7 @@ const faqProps = {
 
 /** Профиль для панели (без токена бота) */
 function profileView(m) {
-    const { botToken, ...rest } = m;
+    const { botToken, claimCode, ...rest } = m;
     return {
         ...rest,
         isPro: Boolean(isPro(m)),
@@ -68,6 +68,7 @@ module.exports = async function masterRoutes(app) {
         preHandler: requireTelegramUser,
         schema: { body: { type: 'object', required: ['name'], properties: profileProps, additionalProperties: false } }
     }, async (request, reply) => {
+        if (request.user.src === 'impersonate') throw httpError(403, 'В режиме настройки регистрация недоступна');
         const telegramId = BigInt(request.user.tg);
         if (await prisma.master.findUnique({ where: { telegramId } })) {
             throw httpError(409, 'Вы уже зарегистрированы');

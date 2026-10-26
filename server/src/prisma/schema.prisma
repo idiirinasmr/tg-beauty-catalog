@@ -15,7 +15,10 @@ datasource db {
 // 2.1 Мастера
 model Master {
   id            String    @id @default(uuid()) @db.Uuid
-  telegramId    BigInt    @unique @map("telegram_id")
+  // null — мастер «под ключ», заведённый владельцем: Telegram ID появится, когда мастер
+  // откроет ссылку t.me/<бот>?start=claim_<claimCode> (см. bot-handlers.js)
+  telegramId    BigInt?   @unique @map("telegram_id")
+  claimCode     String?   @unique @map("claim_code")
   name          String
   specialty     String    @default("")
   phone         String    @default("")

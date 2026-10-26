@@ -14,3 +14,9 @@ td .btn { min-height: 34px; }
 @media (min-width: 640px) { .mon { grid-template-columns: repeat(4, 1fr); } }
 .ok { color: hsl(var(--accent)); font-weight: 700; }
 .bad { color: hsl(var(--destructive)); font-weight: 700; }
+
+.turnkey-grid { display: grid; gap: 10px; grid-template-columns: 1fr; }
+@media (min-width: 640px) { .turnkey-grid { grid-template-columns: repeat(3, 1fr); } }
+.turnkey-steps { padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
+.turnkey-steps code { background: hsl(var(--muted)); padding: 1px 6px; border-radius: 6px; }
+.actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

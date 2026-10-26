@@ -52,6 +52,36 @@ async function masterStats(masterId) {
     return { bookings, newClients, totalClients };
 }
 
+/**
+ * Мастер «под ключ» открыл ссылку t.me/<бот>?start=claim_<код> от владельца:
+ * привязываем его Telegram, чтобы бот слал ему заявки и пускал в панель.
+ * Код одноразовый — после привязки стирается.
+ */
+async function claimMaster(ctx) {
+    const m = ctx.master;
+    const code = ctx.match.slice('claim_'.length);
+    if (!m.claimCode || code !== m.claimCode) return;
+
+    const telegramId = BigInt(ctx.from.id);
+    const taken = await prisma.master.findUnique({ where: { telegramId } });
+    if (taken) {
+        await ctx.reply('Этот Telegram уже привязан к другому каталогу на платформе. Напишите тому, кто настраивал вам бота.');
+        return;
+    }
+    const claimed = await prisma.master.updateMany({
+        where: { id: m.id, claimCode: code },
+        data: { telegramId, claimCode: null }
+    });
+    if (!claimed.count) return;
+
+    // Middleware успел записать мастера как клиента — убираем
+    await prisma.client.deleteMany({ where: { masterId: m.id, telegramId } });
+    ctx.master = { ...m, telegramId, claimCode: null };
+    ctx.isMaster = true;
+    const { notifyAdmin } = require('./admin-bot');
+    notifyAdmin(`🔗 ${m.name} привязал(а) свой Telegram к боту @${ctx.me.username} — теперь получает заявки`);
+}
+
 function setupMasterBot(bot, masterId) {
     // Свежие данные мастера на каждый апдейт (их меняют из панели)
     bot.use(async (ctx, next) => {
@@ -63,6 +93,7 @@ function setupMasterBot(bot, masterId) {
     });
 
     bot.command('start', async ctx => {
+        if (ctx.match.startsWith('claim_')) await claimMaster(ctx);
         const m = ctx.master;
         const username = ctx.me.username;
         if (ctx.isMaster) {
@@ -210,4 +241,4 @@ function setupMasterBot(bot, masterId) {
     });
 }
 
-module.exports = { setupMasterBot, upsertClient, masterStats, formatDate, STATUS_LABELS };
+module.exports = { setupMasterBot, claimMaster, upsertClient, masterStats, formatDate, STATUS_LABELS };

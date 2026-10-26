@@ -23,20 +23,27 @@ async function requireTelegramUser(request) {
     await verifyJwt(request);
 }
 
-/** preHandler: зарегистрированный мастер, кладёт его в request.master */
+function isAdminId(telegramId) {
+    return config.adminIds.includes(String(telegramId));
+}
+
+/**
+ * preHandler: зарегистрированный мастер, кладёт его в request.master.
+ * src = 'impersonate' — владелец платформы настраивает мастера «под ключ»
+ * (токен выдаёт только POST /api/admin/masters/:id/impersonate).
+ */
 async function requireMaster(request) {
     await verifyJwt(request);
     const master = request.user.mid
         ? await prisma.master.findUnique({ where: { id: request.user.mid } })
         : null;
-    if (!master || String(master.telegramId) !== request.user.tg) {
+    const allowed = request.user.src === 'impersonate'
+        ? isAdminId(request.user.tg)
+        : master && String(master.telegramId) === request.user.tg;
+    if (!master || !allowed) {
         throw httpError(403, 'Сначала завершите регистрацию');
     }
     request.master = master;
-}
-
-function isAdminId(telegramId) {
-    return config.adminIds.includes(String(telegramId));
 }
 
 /** preHandler: только владелец платформы (ADMIN_TELEGRAM_IDS) */

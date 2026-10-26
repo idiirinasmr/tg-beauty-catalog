@@ -122,9 +122,45 @@ function saveToken(token) {
     try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {}
 }
 
+/** Данные из JWT (без проверки подписи — только для отображения) */
+function tokenClaims() {
+    try {
+        return JSON.parse(atob(state.token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+    } catch (e) {
+        return {};
+    }
+}
+
+function isImpersonating() {
+    return state.token && tokenClaims().src === 'impersonate';
+}
+
+let configPromise;
+function loadConfig() {
+    configPromise ||= api('/api/auth/config').catch(() => ({}));
+    return configPromise;
+}
+
+/** «Настроим под ключ» на экранах входа и регистрации */
+async function showTurnkeyHints() {
+    const cfg = await loadConfig();
+    if (!cfg.supportTelegram) return;
+    document.querySelectorAll('.turnkey-hint').forEach(a => {
+        a.href = 'https://t.me/' + encodeURIComponent(cfg.supportTelegram);
+        a.innerHTML = `${icon('sparkles', 'sm')}<span>Некогда разбираться? <strong>Настроим всё за вас</strong> за ${rub(cfg.turnkeyPrice)} — напишите нам</span>`;
+        a.hidden = false;
+    });
+}
+
 function logout() {
+    const wasImpersonating = isImpersonating();
     state.token = null;
     try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+    if (wasImpersonating) {
+        window.close(); // вкладка открыта из панели платформы
+        location.href = '/platform/';
+        return;
+    }
     if (tg?.initData) {
         tg.close();
         return;
@@ -153,7 +189,8 @@ async function authenticate() {
 
 async function showLogin() {
     showView('login');
-    const cfg = await api('/api/auth/config').catch(() => ({}));
+    const cfg = await loadConfig();
+    showTurnkeyHints();
     const box = $('#login-widget');
     box.innerHTML = '';
     if (cfg.loginBotUsername) {
@@ -203,6 +240,7 @@ async function start() {
     } catch (e) {
         if (e.status === 403) {
             showView('register');
+            showTurnkeyHints();
             const name = tg?.initDataUnsafe?.user?.first_name;
             if (name) $('#register-form [name=name]').value = name;
         } else if (e.status === 401 || !state.token) {
@@ -269,6 +307,8 @@ async function refreshCounters() {
 
 async function enterApp() {
     showView('app');
+    $('#impersonate-bar').hidden = !isImpersonating();
+    $('#impersonate-name').textContent = state.profile.name;
     await refreshCounters();
     await render();
 }
@@ -308,8 +348,9 @@ const VIEWS = {};
 
 VIEWS.home = async () => {
     const p = state.profile;
-    const [stats, services, portfolio, faq] = await Promise.all([
-        api('/api/master/stats'), api('/api/master/services'), api('/api/master/portfolio'), api('/api/master/faq')
+    const [stats, services, portfolio, faq, cfg] = await Promise.all([
+        api('/api/master/stats'), api('/api/master/services'), api('/api/master/portfolio'), api('/api/master/faq'),
+        loadConfig()
     ]);
     const steps = [
         { done: p.botConnected, text: 'Подключить своего Telegram-бота', href: '#bot' },
@@ -342,6 +383,9 @@ VIEWS.home = async () => {
                     <span class="check-box">${icon('check', 'sm')}</span><span class="check-text">${s.text}</span>
                     ${s.done ? '' : icon('chevron', 'sm')}</a>`).join('')}
             </div>
+            ${cfg.supportTelegram && !isImpersonating() ? `
+            <a class="turnkey-hint" href="https://t.me/${esc(cfg.supportTelegram)}" target="_blank" rel="noopener">
+                ${icon('sparkles', 'sm')}<span>Некогда? <strong>Настроим всё за вас</strong> за ${rub(cfg.turnkeyPrice)} — напишите нам</span></a>` : ''}
         </div>` : ''}
         ${p.botUsername ? `
         <div class="card">

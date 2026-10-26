@@ -32,6 +32,8 @@ async function issueToken(app, tgUser, src = 'platform') {
 module.exports = async function authRoutes(app) {
     app.get('/api/auth/config', async () => ({
         loginBotUsername: config.adminBotUsername || null,
+        supportTelegram: config.supportTelegram || null,
+        turnkeyPrice: config.turnkeyPrice,
         devLogin: config.devLogin
     }));
 

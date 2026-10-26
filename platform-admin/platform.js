@@ -74,9 +74,22 @@ $('#logout').addEventListener('click', () => {
     showLogin();
 });
 
+const METHODS = { yukassa: 'ЮKassa', manual: 'Перевод', stripe: 'Stripe', turnkey: 'Под ключ' };
+
+function masterActions(m) {
+    let claim = '';
+    if (m.awaitingClaim) {
+        claim = m.claimLink
+            ? `<button class="btn btn-ghost btn-sm" data-copy="${esc(m.claimLink)}">Ссылка для мастера</button>`
+            : '<span class="muted small">подключите бота →</span>';
+    }
+    return `<button class="btn btn-primary btn-sm" data-impersonate="${m.id}">Настроить</button>${claim}`;
+}
+
 async function render() {
-    const [stats, masters, payments, mon] = await Promise.all([
-        api('/api/admin/stats'), api('/api/admin/masters'), api('/api/admin/payments'), api('/api/admin/monitoring')
+    const [stats, masters, payments, mon, cfg] = await Promise.all([
+        api('/api/admin/stats'), api('/api/admin/masters'), api('/api/admin/payments'), api('/api/admin/monitoring'),
+        api('/api/auth/config')
     ]);
     $('#view-login').hidden = true;
     $('#view-app').hidden = false;
@@ -92,6 +105,24 @@ async function render() {
             <div class="stat"><div class="stat-value">${stats.clients}</div><div class="stat-label">клиентов (+${stats.clientsToday} сегодня)</div></div>
             <div class="stat"><div class="stat-value">${stats.bookingsTotal}</div><div class="stat-label">заявок (+${stats.bookingsToday} сегодня)</div></div>
         </div>
+
+        <form class="card form" id="turnkey-form">
+            <div class="card-head"><h3>Новый мастер под ключ</h3><span class="muted small">мастер ничего не делает — вы настраиваете за него</span></div>
+            <div class="turnkey-grid">
+                <label class="field"><span>Имя мастера *</span><input class="input" name="name" required maxlength="100" placeholder="Ольга Смирнова"></label>
+                <label class="field"><span>Специализация</span><input class="input" name="specialty" maxlength="150" placeholder="Брови и ресницы"></label>
+                <label class="field"><span>Телефон</span><input class="input" name="phone" type="tel" maxlength="30"></label>
+                <label class="field"><span>Адрес</span><input class="input" name="address" maxlength="200"></label>
+                <label class="field"><span>Цена настройки, ₽</span><input class="input" name="price" type="number" min="0" value="${cfg.turnkeyPrice}"></label>
+            </div>
+            <button class="btn btn-primary" type="submit">Создать и настроить</button>
+            <ol class="turnkey-steps muted small">
+                <li>«Создать и настроить» — откроется панель этого мастера: внесите услуги, фото, описание.</li>
+                <li>В @BotFather создайте бота для мастера (<code>/newbot</code>) и вставьте токен в разделе «Бот».</li>
+                <li>Здесь нажмите «Ссылка для мастера» и отправьте её мастеру — один раз нажать Start, чтобы получать заявки.</li>
+                <li>Получили оплату — в «Платежах» нажмите «Оплачено».</li>
+            </ol>
+        </form>
 
         <div class="card">
             <div class="card-head"><h3>Мониторинг</h3><span class="muted small">аптайм ${Math.round(mon.uptimeSec / 3600)} ч</span></div>
@@ -113,14 +144,15 @@ async function render() {
                 <tbody>${masters.map(m => {
                     const pro = m.plan === 'pro' && new Date(m.planExpiresAt) > new Date();
                     return `<tr>
-                        <td><strong>${esc(m.name)}</strong><div class="muted small">${esc(m.specialty)}</div></td>
+                        <td><strong>${esc(m.name)}</strong><div class="muted small">${esc(m.specialty)}${m.awaitingClaim ? ' · ждёт привязки Telegram' : ''}</div></td>
                         <td>${m.botUsername ? `<a href="https://t.me/${esc(m.botUsername)}" target="_blank" rel="noopener">@${esc(m.botUsername)}</a> ${m.botRunning ? '<span class="ok">●</span>' : '<span class="bad">●</span>'}` : '<span class="muted">—</span>'}</td>
                         <td>${pro ? `<span class="badge pro">Pro до ${day(m.planExpiresAt)}</span>` : '<span class="badge free">Free</span>'}</td>
                         <td>${m._count.clients}</td>
                         <td>${m._count.bookings}</td>
                         <td>${day(m.createdAt)}</td>
-                        <td><button class="btn btn-outline btn-sm" data-plan="pro" data-id="${m.id}">+30 дней Pro</button>
-                            ${pro ? `<button class="btn btn-danger btn-sm" data-plan="free" data-id="${m.id}">→ Free</button>` : ''}</td>
+                        <td><div class="actions">${masterActions(m)}
+                            <button class="btn btn-outline btn-sm" data-plan="pro" data-id="${m.id}">+30 дней Pro</button>
+                            ${pro ? `<button class="btn btn-danger btn-sm" data-plan="free" data-id="${m.id}">→ Free</button>` : ''}</div></td>
                     </tr>`;
                 }).join('') || '<tr><td colspan="7" class="muted">Мастеров пока нет</td></tr>'}</tbody>
             </table></div>
@@ -132,13 +164,61 @@ async function render() {
                 <thead><tr><th>Дата</th><th>Мастер</th><th>Сумма</th><th>Способ</th><th>Статус</th><th>Период</th></tr></thead>
                 <tbody>${payments.map(p => `<tr>
                     <td>${day(p.createdAt)}</td><td>${esc(p.master.name)}</td><td>${rub(p.amount)}</td>
-                    <td>${{ yukassa: 'ЮKassa', manual: 'Перевод', stripe: 'Stripe' }[p.method] || esc(p.method)}</td>
-                    <td><span class="badge ${p.status === 'paid' ? 'confirmed' : p.status === 'pending' ? 'new' : 'cancelled'}">${{ paid: 'оплачен', pending: 'ожидает', failed: 'ошибка' }[p.status] || esc(p.status)}</span></td>
+                    <td>${METHODS[p.method] || esc(p.method)}</td>
+                    <td><span class="badge ${p.status === 'paid' ? 'confirmed' : p.status === 'pending' ? 'new' : 'cancelled'}">${{ paid: 'оплачен', pending: 'ожидает', failed: 'ошибка' }[p.status] || esc(p.status)}</span>
+                        ${p.status === 'pending' && p.method !== 'yukassa' ? `<button class="btn btn-outline btn-sm" data-paid="${p.id}">Оплачено</button>` : ''}</td>
                     <td>${p.periodEnd ? `${day(p.periodStart)} — ${day(p.periodEnd)}` : '—'}</td>
                 </tr>`).join('') || '<tr><td colspan="6" class="muted">Платежей пока нет</td></tr>'}</tbody>
             </table></div>
         </div>`;
 }
+
+/** Открыть панель мастера в режиме настройки (новая вкладка) */
+async function openAsMaster(masterId) {
+    const { token: masterToken } = await api(`/api/admin/masters/${masterId}/impersonate`, { method: 'POST' });
+    try { localStorage.setItem('beauty_master_token', masterToken); } catch (e) {}
+    window.open('/admin/#home', '_blank');
+}
+
+document.addEventListener('submit', async e => {
+    if (e.target.id !== 'turnkey-form') return;
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const body = Object.fromEntries([...fd].filter(([, v]) => v !== ''));
+    if (body.price !== undefined) body.price = Number(body.price);
+    const btn = e.target.querySelector('[type=submit]');
+    btn.disabled = true;
+    try {
+        const master = await api('/api/admin/masters', { method: 'POST', body });
+        toast(`Мастер «${master.name}» создан — открываю его панель`);
+        await openAsMaster(master.id);
+        await render();
+    } catch (err) {
+        toast(err.message, true);
+        btn.disabled = false;
+    }
+});
+
+document.addEventListener('click', async e => {
+    const el = e.target.closest('[data-impersonate], [data-copy], [data-paid]');
+    if (!el) return;
+    try {
+        if (el.dataset.impersonate) {
+            await openAsMaster(el.dataset.impersonate);
+        } else if (el.dataset.copy) {
+            await navigator.clipboard.writeText(el.dataset.copy).catch(() => prompt('Скопируйте ссылку:', el.dataset.copy));
+            toast('Ссылка скопирована — отправьте её мастеру');
+        } else if (el.dataset.paid) {
+            el.disabled = true;
+            await api(`/api/admin/payments/${el.dataset.paid}/paid`, { method: 'POST' });
+            toast('Оплата отмечена');
+            await render();
+        }
+    } catch (err) {
+        toast(err.message, true);
+        el.disabled = false;
+    }
+});
 
 document.addEventListener('click', async e => {
     const btn = e.target.closest('[data-plan]');

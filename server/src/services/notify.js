@@ -36,6 +36,7 @@ async function sendFromMasterBot(masterId, chatId, text, { priority = 'high', ph
 }
 
 async function notifyMaster(master, text, extra = {}) {
+    if (!master.telegramId) return false; // мастер «под ключ» ещё не открыл свою ссылку
     return sendFromMasterBot(master.id, master.telegramId, text, { priority: 'critical', ...extra });
 }
 

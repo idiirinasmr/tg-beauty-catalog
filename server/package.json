@@ -12,7 +12,7 @@
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
     "generate-key": "node scripts/generate-key.js",
-    "test": "node --test --test-concurrency=1 test/unit.test.js test/api.test.js"
+    "test": "node --test --test-concurrency=1 test/unit.test.js test/api.test.js test/turnkey.test.js"
   },
   "prisma": {
     "schema": "src/prisma/schema.prisma"

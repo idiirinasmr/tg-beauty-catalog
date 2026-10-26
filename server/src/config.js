@@ -52,6 +52,10 @@ const config = {
     yukassaSecretKey: env.YUKASSA_SECRET_KEY || '',
     manualPaymentDetails: env.MANUAL_PAYMENT_DETAILS || '',
 
+    // Настройка под ключ: владелец сам заполняет каталог мастера (разовая оплата)
+    turnkeyPrice: Number(env.TURNKEY_PRICE || 2000),
+    supportTelegram: (env.SUPPORT_TELEGRAM || '').replace(/^@/, ''),
+
     devLogin: isDev && env.DEV_LOGIN === '1',
 
     // Лимиты тарифа Free (раздел 5 плана)
