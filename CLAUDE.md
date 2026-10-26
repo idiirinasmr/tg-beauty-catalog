@@ -106,7 +106,8 @@ npm test                   # 40 тестов
 serverless (`config.serverless`): `api/index.js` → `server/src/vercel.js`, расписание — `/api/cron/*`.
 Не полагаться на состояние в памяти процесса: на Vercel его нет между запросами. Подробно — [server/README.md](server/README.md).
 
-## Статус (26.10.2026)
+## Статус (27.10.2026)
 
-Все 8 этапов плана реализованы в ветке `feature/saas-platform`. Она не смёржена и не запушена.
-Для деплоя от владельца нужны: пароль БД и service_role ключ Supabase, VPS, домен, бот владельца, магазин ЮKassa.
+Платформа опубликована: https://krasa-platform.vercel.app (ветка `feature/saas-platform`, на GitHub; в master не смёржена).
+Публикация — `vercel deploy --prod` из корня (проект не подключён к GitHub, деплой из CLI).
+Продакшен-секреты — в Vercel и в `server/secrets/vercel.env` (не в git). Не хватает: магазина ЮKassa, VPS и домена (отложены).
