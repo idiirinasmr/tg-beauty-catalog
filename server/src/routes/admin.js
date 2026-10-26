@@ -23,7 +23,7 @@ module.exports = async function adminRoutes(app) {
         });
         return masters.map(({ botToken, claimCode, ...m }) => ({
             ...m,
-            botRunning: botManager.isRunning(m.id),
+            botRunning: botManager.isActive({ id: m.id, botToken }),
             // Ссылка, по которой мастер «под ключ» один раз нажимает Start и привязывает свой Telegram
             claimLink: claimCode && m.botUsername ? `https://t.me/${m.botUsername}?start=claim_${claimCode}` : null,
             awaitingClaim: Boolean(claimCode)
@@ -132,7 +132,7 @@ module.exports = async function adminRoutes(app) {
                 load: os.loadavg().map(n => Math.round(n * 100) / 100),
                 cpus: os.cpus().length
             },
-            bots: botManager.runningCount(),
+            bots: await botManager.activeCount(),
             queue: queueStats(),
             lastBackup
         };

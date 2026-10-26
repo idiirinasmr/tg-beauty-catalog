@@ -50,7 +50,7 @@ function profileView(m) {
         ...rest,
         isPro: Boolean(isPro(m)),
         botConnected: Boolean(botToken),
-        botRunning: botManager.isRunning(m.id),
+        botRunning: botManager.isActive(m),
         miniAppUrl: m.botUsername ? botManager.miniAppUrl(m.botUsername) : null
     };
 }
@@ -358,7 +358,7 @@ module.exports = async function masterRoutes(app) {
             preHandler: requirePro,
             config: { rateLimit: { max: 5, timeWindow: '1 hour' } }
         }, async (request, reply) => {
-            if (!botManager.isRunning(request.master.id)) throw httpError(400, 'Сначала подключите бота');
+            if (!botManager.isActive(request.master)) throw httpError(400, 'Сначала подключите бота');
 
             // Принимаем и JSON { text }, и multipart (text + фото)
             let text;

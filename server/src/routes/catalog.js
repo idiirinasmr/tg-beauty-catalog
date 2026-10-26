@@ -9,6 +9,7 @@ const config = require('../config');
 const prisma = require('../utils/db');
 const { isPro } = require('../middleware/plan-check');
 const { httpError } = require('../middleware/auth');
+const { track } = require('../utils/background');
 
 const params = {
     type: 'object', required: ['botUsername'],
@@ -52,7 +53,7 @@ module.exports = async function catalogRoutes(app) {
         ]);
 
         // Счётчик открытий каталога — для конверсии в статистике
-        prisma.master.update({ where: { id: master.id }, data: { statsViews: { increment: 1 } } }).catch(() => {});
+        track(prisma.master.update({ where: { id: master.id }, data: { statsViews: { increment: 1 } } }));
 
         return {
             master: {

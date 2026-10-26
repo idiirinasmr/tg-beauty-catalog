@@ -18,9 +18,8 @@ const prisma = require('./utils/db');
 const { LOCAL_DIR } = require('./utils/upload');
 const botManager = require('./services/bot-manager');
 const adminBot = require('./services/admin-bot');
-const reminder = require('./services/reminder');
 const broadcast = require('./services/broadcast');
-const { checkSubscriptions } = require('./services/payment');
+const jobs = require('./services/jobs');
 
 const ROOT = path.join(__dirname, '..', '..');
 
@@ -77,15 +76,16 @@ function buildApp() {
     app.register(require('./routes/master'));
     app.register(require('./routes/payment'));
     app.register(require('./routes/admin'));
+    app.register(require('./routes/cron'));
 
     app.get('/api/health', async () => {
         await prisma.$queryRaw`SELECT 1`;
-        return { ok: true, bots: botManager.runningCount() };
+        return { ok: true, bots: await botManager.activeCount() };
     });
 
     // --- Вебхуки Telegram ---
     app.post('/bot/:hookId', async (request, reply) => {
-        const ok = botManager.handleWebhook(
+        const ok = await botManager.handleWebhook(
             request.params.hookId,
             request.headers['x-telegram-bot-api-secret-token'],
             request.body
@@ -93,7 +93,8 @@ function buildApp() {
         return reply.code(ok ? 200 : 401).send(ok ? 'ok' : 'unauthorized');
     });
 
-    // --- Фронтенды ---
+    // --- Фронтенды (на Vercel их раздаёт сам Vercel из public/, см. scripts/build-vercel.js) ---
+    if (config.serverless) return app;
     const statics = [
         ['tg-app', '/app/'],
         ['admin', '/admin/'],
@@ -111,12 +112,12 @@ function buildApp() {
     return app;
 }
 
+// На своём сервере расписание ведёт node-cron. На Vercel те же задачи вызываются
+// по HTTP: /api/cron/tick (Supabase pg_cron) и /api/cron/daily (Vercel Cron), см. routes/cron.js
 function startCron() {
     const tz = { timezone: config.timezone };
-    cron.schedule('*/5 * * * *', reminder.tick, tz);                  // напоминания + отзывы
-    cron.schedule('0 10 * * *', () => checkSubscriptions().catch(console.error), tz); // подписки
-    cron.schedule('0 21 * * *', () => adminBot.sendDailyReport().catch(console.error), tz); // отчёт
-    cron.schedule('0 9 * * *', () => adminBot.checkBackups().catch(console.error), tz);     // бэкапы
+    cron.schedule('*/5 * * * *', () => jobs.tick().catch(console.error), tz);  // напоминания, отзывы, рассылки
+    cron.schedule('0 21 * * *', () => jobs.daily().catch(console.error), tz);  // подписки, отчёт, бэкапы
 }
 
 async function main() {

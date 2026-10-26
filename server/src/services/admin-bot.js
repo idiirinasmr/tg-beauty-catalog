@@ -9,9 +9,19 @@ const prisma = require('../utils/db');
 const { enqueue, stats: queueStats } = require('../utils/queue');
 const botManager = require('./bot-manager');
 const { overview } = require('./platform-stats');
-const { activatePro, revenue } = require('./payment');
+const { activatePro } = require('./payment');
+const { track } = require('../utils/background');
 
-const KEY = 'admin';
+const KEY = botManager.ADMIN_KEY;
+
+const ADMIN_COMMANDS = [
+    { command: 'stats', description: 'Общая статистика' },
+    { command: 'today', description: 'За сегодня' },
+    { command: 'masters', description: 'Все мастера' },
+    { command: 'revenue', description: 'Выручка' },
+    { command: 'expiring', description: 'Истекающие подписки' },
+    { command: 'backup', description: 'Статус бэкапа' }
+];
 
 function rub(n) {
     return `${Number(n).toLocaleString('ru-RU')} руб`;
@@ -21,17 +31,18 @@ function dateRu(d) {
     return d ? d.toLocaleDateString('ru-RU', { timeZone: config.timezone }) : '—';
 }
 
-/** Уведомление всем админам. Без ADMIN_BOT_TOKEN — просто в лог. */
+/** Уведомление всем админам. Без ADMIN_BOT_TOKEN — просто в лог. Можно вызывать без await. */
 function notifyAdmin(text) {
-    const api = botManager.getApi(KEY);
-    if (!api) {
-        console.log(`[admin] ${text}`);
-        return;
-    }
-    for (const id of config.adminIds) {
-        enqueue(KEY, () => api.sendMessage(id, text), 'critical')
-            .catch(err => console.error('[admin-bot]', err.message));
-    }
+    return track((async () => {
+        const api = await botManager.getApi(KEY);
+        if (!api) {
+            console.log(`[admin] ${text}`);
+            return;
+        }
+        await Promise.all(config.adminIds.map(id =>
+            enqueue(KEY, () => api.sendMessage(id, text), 'critical')
+                .catch(err => console.error('[admin-bot]', err.message))));
+    })());
 }
 
 async function findMasterByName(query) {
@@ -94,7 +105,7 @@ function setupAdminBot(bot) {
             `Мастеров: ${s.masters}/${s.maxMasters} (Free: ${s.free}, Pro: ${s.pro})\n` +
             `Клиентов: ${s.clients}\nЗаписей всего: ${s.bookingsTotal}\n` +
             `Выручка за месяц: ${rub(s.revenue.month)}\n` +
-            `Активных ботов: ${botManager.runningCount()}\nОчередь сообщений: ${queueStats().pending}`
+            `Активных ботов: ${await botManager.activeCount()}\nОчередь сообщений: ${queueStats().pending}`
         );
     });
 
@@ -125,7 +136,7 @@ function setupAdminBot(bot) {
             `Специализация: ${m.specialty || '—'}`,
             `Тариф: ${m.plan}${m.plan === 'pro' ? ` до ${dateRu(m.planExpiresAt)}` : ''}`,
             `Услуг: ${m._count.services}, клиентов: ${m._count.clients}, записей: ${m._count.bookings}`,
-            `Бот: ${botManager.isRunning(m.id) ? 'работает' : 'не подключён'}`,
+            `Бот: ${botManager.isActive(m) ? 'работает' : 'не подключён'}`,
             `Регистрация: ${dateRu(m.createdAt)}`,
             `Телефон: ${m.phone || '—'}, email: ${m.email || '—'}`
         ].join('\n'));
@@ -178,25 +189,19 @@ async function startAdminBot() {
         return;
     }
     const entry = await botManager.launch(KEY, config.adminBotToken, setupAdminBot);
-    await entry.bot.api.setMyCommands([
-        { command: 'stats', description: 'Общая статистика' },
-        { command: 'today', description: 'За сегодня' },
-        { command: 'masters', description: 'Все мастера' },
-        { command: 'revenue', description: 'Выручка' },
-        { command: 'expiring', description: 'Истекающие подписки' },
-        { command: 'backup', description: 'Статус бэкапа' }
-    ]).catch(() => {});
+    await entry.bot.api.setMyCommands(ADMIN_COMMANDS).catch(() => {});
 }
 
 async function sendDailyReport() {
-    notifyAdmin(await dailyReportText());
+    await notifyAdmin(await dailyReportText());
 }
 
-/** Алерт, если за последние 26 часов не было успешного бэкапа */
+/** Алерт, если за последние 26 часов не было успешного бэкапа (только на своём сервере с backup.sh) */
 async function checkBackups() {
+    if (config.serverless) return; // на Vercel backup.sh не запускается — бэкапы делает Supabase
     const since = new Date(Date.now() - 26 * 60 * 60 * 1000);
     const ok = await prisma.backupLog.count({ where: { ok: true, createdAt: { gte: since } } });
-    if (!ok) notifyAdmin('🚨 Ошибка бэкапа: за сутки не создано ни одного успешного бэкапа. Проверь VPS');
+    if (!ok) await notifyAdmin('🚨 Ошибка бэкапа: за сутки не создано ни одного успешного бэкапа. Проверь VPS');
 }
 
-module.exports = { notifyAdmin, startAdminBot, sendDailyReport, checkBackups, revenue };
+module.exports = { notifyAdmin, startAdminBot, setupAdminBot, sendDailyReport, checkBackups, ADMIN_COMMANDS };

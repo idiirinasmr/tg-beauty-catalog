@@ -6,3 +6,5 @@ server/.env
 server/.dev-db/
 server/secrets/
 server/uploads/
+public/
+.vercel

@@ -3,6 +3,7 @@
 const { GrammyError } = require('grammy');
 const prisma = require('../utils/db');
 const { enqueue } = require('../utils/queue');
+const { track } = require('../utils/background');
 const botManager = require('./bot-manager');
 
 function escapeHtml(text) {
@@ -12,9 +13,14 @@ function escapeHtml(text) {
 /**
  * Отправить сообщение от бота мастера.
  * Возвращает true при успехе, false если бот не запущен или клиент заблокировал бота.
+ * Можно вызывать без await: отправка дождётся завершения и на Vercel (utils/background.js).
  */
-async function sendFromMasterBot(masterId, chatId, text, { priority = 'high', photo, ...extra } = {}) {
-    const api = botManager.getApi(masterId);
+function sendFromMasterBot(masterId, chatId, text, options = {}) {
+    return track(send(masterId, chatId, text, options));
+}
+
+async function send(masterId, chatId, text, { priority = 'high', photo, ...extra } = {}) {
+    const api = await botManager.getApi(masterId);
     if (!api) return false;
     try {
         await enqueue(masterId, () => photo

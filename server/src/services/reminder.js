@@ -27,7 +27,7 @@ async function sendReminders() {
 
     for (const b of bookings) {
         // Бот выключен — не помечаем, попробуем на следующем запуске
-        if (!isPro(b.master) || !botManager.isRunning(b.masterId)) continue;
+        if (!isPro(b.master) || !botManager.isActive(b.master)) continue;
         const left = b.appointmentAt.getTime() - now;
         const soon = left <= 2 * HOUR;
         if (soon ? b.reminder2hSent : b.reminder24hSent) continue;
@@ -50,10 +50,11 @@ async function sendReminders() {
 async function requestReviews() {
     const bookings = await prisma.booking.findMany({
         where: { status: 'completed', reviewRequested: false, completedAt: { lte: new Date(Date.now() - 2 * HOUR) } },
+        include: { master: true },
         take: 200
     });
     for (const b of bookings) {
-        if (!botManager.isRunning(b.masterId)) continue;
+        if (!botManager.isActive(b.master)) continue;
         const claimed = await prisma.booking.updateMany({ where: { id: b.id, reviewRequested: false }, data: { reviewRequested: true } });
         if (!claimed.count) continue;
         const kb = new InlineKeyboard();

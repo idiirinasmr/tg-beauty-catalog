@@ -6,6 +6,10 @@
  *    плюс заголовок X-Telegram-Bot-Api-Secret-Token. Ответ 200 сразу, обработка в фоне,
  *    дедупликация по update_id.
  *  - polling (локально): bot.start() для каждого бота.
+ *
+ * На Vercel (config.serverless) боты не живут в памяти: при каждом апдейте бот «просыпается»
+ * по hookId (wake), а для отправки сообщений Api создаётся по токену из БД (getApi).
+ * Вебхук ставится один раз — при подключении бота (launch) или в cron (ensureAdminWebhook).
  */
 
 const crypto = require('crypto');
@@ -15,12 +19,23 @@ const config = require('../config');
 const prisma = require('../utils/db');
 const { decrypt } = require('../utils/encrypt');
 
+const ADMIN_KEY = 'admin';
 const bots = new Map();     // key (masterId | 'admin') -> entry
 const hooks = new Map();    // hookId -> entry
+const apis = new Map();     // key -> Api (serverless: только для отправки)
 const DEDUP_SIZE = 200;
+const ALLOWED_UPDATES = ['message', 'callback_query'];
 
 function hmac(label, value) {
     return crypto.createHmac('sha256', config.jwtSecret).update(`${label}:${value}`).digest('hex');
+}
+
+function hookIdFor(botId) {
+    return hmac('hook', botId).slice(0, 40);
+}
+
+function secretFor(botId) {
+    return hmac('secret', botId).slice(0, 64);
 }
 
 function miniAppUrl(botUsername) {
@@ -31,15 +46,38 @@ function panelUrl(botUsername) {
     return `${config.appUrl}/admin/${botUsername ? `?bot=${encodeURIComponent(botUsername)}` : ''}`;
 }
 
-function createBot(token) {
-    const bot = new Bot(token, { client: { timeoutSeconds: 15 } });
+function createBot(token, botInfo) {
+    const bot = new Bot(token, { client: { timeoutSeconds: 15 }, botInfo });
     // 429 Too Many Requests -> ждём retry_after и повторяем; сетевые ошибки — тоже
     bot.api.config.use(autoRetry({ maxRetryAttempts: 5, maxDelaySeconds: 60, rethrowHttpErrors: false }));
     return bot;
 }
 
+/** botInfo без запроса getMe — для «пробуждения» бота на Vercel */
+function knownBotInfo(botId, username) {
+    return {
+        id: Number(botId), is_bot: true, first_name: username, username,
+        can_join_groups: false, can_read_all_group_messages: false, supports_inline_queries: false,
+        can_connect_to_business: false, has_main_web_app: false
+    };
+}
+
 function isUnauthorized(err) {
     return err instanceof GrammyError && err.error_code === 401;
+}
+
+function register(key, bot, setup, onDead) {
+    setup(bot);
+    bot.catch(err => {
+        console.error(`[bot ${bot.botInfo.username}]`, err.error?.message || err.message);
+    });
+    const entry = {
+        key, bot, onDead, username: bot.botInfo.username, seen: [],
+        hookId: hookIdFor(bot.botInfo.id), secret: secretFor(bot.botInfo.id)
+    };
+    bots.set(key, entry);
+    hooks.set(entry.hookId, entry);
+    return entry;
 }
 
 /**
@@ -50,27 +88,17 @@ async function launch(key, token, setup, onDead) {
     await stop(key);
     const bot = createBot(token);
     await bot.init(); // getMe; бросит 401 при неверном токене
-    setup(bot);
-    bot.catch(err => {
-        console.error(`[bot ${bot.botInfo.username}]`, err.error?.message || err.message);
-    });
-
-    const entry = { key, bot, username: bot.botInfo.username, seen: [], onDead };
-    bots.set(key, entry);
+    const entry = register(key, bot, setup, onDead);
 
     if (config.botMode === 'webhook') {
-        const hookId = hmac('hook', bot.botInfo.id).slice(0, 40);
-        entry.hookId = hookId;
-        entry.secret = hmac('secret', bot.botInfo.id).slice(0, 64);
-        hooks.set(hookId, entry);
-        await bot.api.setWebhook(`${config.appUrl}/bot/${hookId}`, {
+        await bot.api.setWebhook(`${config.appUrl}/bot/${entry.hookId}`, {
             secret_token: entry.secret,
-            allowed_updates: ['message', 'callback_query']
+            allowed_updates: ALLOWED_UPDATES
         });
     } else {
         await bot.api.deleteWebhook().catch(() => {});
         bot.start({
-            allowed_updates: ['message', 'callback_query'],
+            allowed_updates: ALLOWED_UPDATES,
             onStart: () => console.log(`[bot] @${entry.username} polling`)
         }).catch(err => handleDead(entry, err));
     }
@@ -89,18 +117,49 @@ async function handleDead(entry, err) {
 
 async function stop(key) {
     const entry = bots.get(key);
-    if (!entry) return;
+    apis.delete(key);
+    if (!entry) {
+        // Vercel: бота нет в памяти, но вебхук в Telegram мог быть поставлен — снимаем по токену
+        if (config.serverless && key !== ADMIN_KEY) {
+            const api = await getApi(key).catch(() => null);
+            apis.delete(key);
+            await api?.deleteWebhook().catch(() => {});
+        }
+        return;
+    }
     bots.delete(key);
-    if (entry.hookId) hooks.delete(entry.hookId);
+    hooks.delete(entry.hookId);
     try {
         if (config.botMode === 'webhook') await entry.bot.api.deleteWebhook();
         else await entry.bot.stop();
     } catch { /* бот уже мёртв — не важно */ }
 }
 
+/** Vercel: найти бота по hookId и поднять его обработчики (без getMe) */
+async function wake(hookId) {
+    if (config.adminBotToken) {
+        const adminId = config.adminBotToken.split(':')[0];
+        if (hookIdFor(adminId) === hookId) {
+            const { setupAdminBot } = require('./admin-bot');
+            const bot = createBot(config.adminBotToken, knownBotInfo(adminId, config.adminBotUsername));
+            return register(ADMIN_KEY, bot, setupAdminBot);
+        }
+    }
+    const candidates = await prisma.master.findMany({
+        where: { botId: { not: null }, botToken: { not: null } },
+        select: { id: true, botId: true }
+    });
+    const match = candidates.find(m => hookIdFor(m.botId) === hookId);
+    if (!match) return null;
+    const master = await prisma.master.findUnique({ where: { id: match.id } });
+    const { setupMasterBot } = require('./bot-handlers');
+    const bot = createBot(decrypt(master.botToken, config.encryptionKey), knownBotInfo(master.botId, master.botUsername));
+    return register(master.id, bot, b => setupMasterBot(b, master.id), () => onMasterBotDead(master.id));
+}
+
 /** Вызов из Fastify-маршрута вебхука. Возвращает false, если хук/секрет неверны. */
-function handleWebhook(hookId, secretHeader, update) {
-    const entry = hooks.get(hookId);
+async function handleWebhook(hookId, secretHeader, update) {
+    const entry = hooks.get(hookId) || (config.serverless ? await wake(hookId) : null);
     const given = Buffer.from(String(secretHeader || ''));
     const expected = Buffer.from(entry?.secret || '');
     if (!entry || given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
@@ -110,7 +169,9 @@ function handleWebhook(hookId, secretHeader, update) {
     entry.seen.push(update.update_id);
     if (entry.seen.length > DEDUP_SIZE) entry.seen.shift();
 
-    entry.bot.handleUpdate(update).catch(err => handleDead(entry, err));
+    const handled = entry.bot.handleUpdate(update).catch(err => handleDead(entry, err));
+    // На Vercel обработку нужно дождаться до ответа, иначе функция «уснёт» на полпути
+    if (config.serverless) await handled;
     return true;
 }
 
@@ -158,26 +219,57 @@ async function startAll() {
             if (isUnauthorized(err)) onMasterBotDead(master.id);
         }
     }
-    console.log(`[bot] запущено ботов мастеров: ${[...bots.keys()].filter(k => k !== 'admin').length}`);
+    console.log(`[bot] запущено ботов мастеров: ${[...bots.keys()].filter(k => k !== ADMIN_KEY).length}`);
 }
 
 async function stopAll() {
     await Promise.all([...bots.keys()].map(stop));
 }
 
-function getApi(key) {
-    return bots.get(key)?.bot.api || null;
+/** Api для отправки сообщений от имени бота (key = id мастера или 'admin'), null — бота нет */
+async function getApi(key) {
+    const running = bots.get(key);
+    if (running) return running.bot.api;
+    if (!config.serverless) return null;
+    if (apis.has(key)) return apis.get(key);
+
+    let token = null;
+    if (key === ADMIN_KEY) {
+        token = config.adminBotToken || null;
+    } else {
+        const master = await prisma.master.findUnique({ where: { id: key }, select: { botToken: true } });
+        token = master?.botToken ? decrypt(master.botToken, config.encryptionKey) : null;
+    }
+    const api = token ? createBot(token).api : null;
+    apis.set(key, api);
+    return api;
 }
 
-function isRunning(key) {
-    return bots.has(key);
+/** Подключён ли бот мастера и может ли он отправлять сообщения */
+function isActive(master) {
+    return config.serverless ? Boolean(master.botToken) : bots.has(master.id);
 }
 
-function runningCount() {
-    return [...bots.keys()].filter(k => k !== 'admin').length;
+async function activeCount() {
+    return config.serverless
+        ? prisma.master.count({ where: { botToken: { not: null } } })
+        : [...bots.keys()].filter(k => k !== ADMIN_KEY).length;
+}
+
+/** Vercel: поставить вебхук бота владельца, если он ещё не стоит (вызывается из cron) */
+async function ensureAdminWebhook() {
+    if (!config.serverless || !config.adminBotToken) return;
+    const botId = config.adminBotToken.split(':')[0];
+    const url = `${config.appUrl}/bot/${hookIdFor(botId)}`;
+    const api = await getApi(ADMIN_KEY);
+    const info = await api.getWebhookInfo();
+    if (info.url === url) return;
+    await api.setWebhook(url, { secret_token: secretFor(botId), allowed_updates: ALLOWED_UPDATES });
+    const { ADMIN_COMMANDS } = require('./admin-bot');
+    await api.setMyCommands(ADMIN_COMMANDS).catch(() => {});
 }
 
 module.exports = {
-    launch, stop, stopAll, startAll, startMasterBot, handleWebhook,
-    getApi, isRunning, runningCount, isUnauthorized, createBot, miniAppUrl, panelUrl
+    launch, stop, stopAll, startAll, startMasterBot, handleWebhook, ensureAdminWebhook,
+    getApi, isActive, activeCount, isUnauthorized, createBot, miniAppUrl, panelUrl, ADMIN_KEY
 };

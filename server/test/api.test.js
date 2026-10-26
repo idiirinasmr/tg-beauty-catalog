@@ -258,7 +258,7 @@ test('полный сценарий мастер → клиент → владе
         let b = await prisma.booking.findUnique({ where: { id: bookingId } });
         assert.ok(!b.reminder2hSent, 'не помечено, пока бот выключен');
 
-        t2.mock.method(botManager, 'isRunning', () => true);
+        t2.mock.method(botManager, 'isActive', () => true);
         await reminder.sendReminders();
         b = await prisma.booking.findUnique({ where: { id: bookingId } });
         assert.ok(b.reminder2hSent && b.reminder24hSent);

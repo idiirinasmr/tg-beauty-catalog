@@ -13,14 +13,20 @@ function required(name) {
     return env[name];
 }
 
-// Ключ шифрования токенов читается из файла, а не из .env (раздел 13.1 плана).
-// Нет файла — сервер не стартует.
+// Ключ шифрования токенов на своём сервере читается из файла, а не из .env (раздел 13.1 плана).
+// На Vercel файлов нет — ключ лежит в зашифрованной переменной окружения ENCRYPTION_KEY.
+// Нет ключа — сервер не стартует.
 function loadEncryptionKey() {
-    const keyPath = path.resolve(path.join(__dirname, '..'), required('ENCRYPTION_KEY_PATH'));
-    if (!fs.existsSync(keyPath)) {
-        throw new Error(`Файл ключа шифрования не найден: ${keyPath}. Создайте его: npm run generate-key`);
+    let key;
+    if (env.ENCRYPTION_KEY_PATH) {
+        const keyPath = path.resolve(path.join(__dirname, '..'), env.ENCRYPTION_KEY_PATH);
+        if (!fs.existsSync(keyPath)) {
+            throw new Error(`Файл ключа шифрования не найден: ${keyPath}. Создайте его: npm run generate-key`);
+        }
+        key = fs.readFileSync(keyPath, 'utf8').trim();
+    } else {
+        key = required('ENCRYPTION_KEY').trim();
     }
-    const key = fs.readFileSync(keyPath, 'utf8').trim();
     if (!/^[0-9a-f]{64}$/i.test(key)) {
         throw new Error('Ключ шифрования должен быть 64 hex-символа (32 байта)');
     }
@@ -28,13 +34,17 @@ function loadEncryptionKey() {
 }
 
 const isDev = env.NODE_ENV === 'development';
+// Vercel: код запускается только на время запроса — без polling, node-cron и фоновых задач
+const serverless = Boolean(env.VERCEL) || env.SERVERLESS === '1';
 const appUrl = (env.APP_URL || `http://localhost:${env.PORT || 3000}`).replace(/\/$/, '');
 
 const config = {
     isDev,
+    serverless,
     port: Number(env.PORT || 3000),
     appUrl,
-    botMode: env.BOT_MODE || (appUrl.startsWith('https://') ? 'webhook' : 'polling'),
+    botMode: serverless ? 'webhook' : env.BOT_MODE || (appUrl.startsWith('https://') ? 'webhook' : 'polling'),
+    cronSecret: env.CRON_SECRET || '',
     jwtSecret: required('JWT_SECRET'),
     encryptionKey: loadEncryptionKey(),
     maxMasters: Number(env.MAX_MASTERS || 50),

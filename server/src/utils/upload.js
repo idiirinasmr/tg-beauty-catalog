@@ -31,6 +31,8 @@ async function saveImage({ buffer, ext, mimetype }, folder) {
     const name = `${folder}/${crypto.randomUUID()}.${ext}`;
 
     if (!config.supabaseServiceKey) {
+        // На Vercel диск только для чтения — без Supabase Storage фото не сохранить
+        if (config.serverless) throw httpError(503, 'Хранилище фото не настроено (SUPABASE_SERVICE_KEY)');
         const target = path.join(LOCAL_DIR, name);
         await fs.promises.mkdir(path.dirname(target), { recursive: true });
         await fs.promises.writeFile(target, buffer);
