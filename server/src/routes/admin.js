@@ -51,10 +51,11 @@ module.exports = async function adminRoutes(app) {
         }
         const { price = config.turnkeyPrice, ...profile } = request.body;
         const master = await prisma.master.create({
-            data: { ...profile, claimCode: crypto.randomBytes(16).toString('base64url') }
-        });
-        await prisma.payment.create({
-            data: { masterId: master.id, amount: price, method: 'turnkey', status: 'pending' }
+            data: {
+                ...profile,
+                claimCode: crypto.randomBytes(16).toString('base64url'),
+                payments: { create: { amount: price, method: 'turnkey', status: 'pending' } }
+            }
         });
         reply.code(201);
         return { id: master.id, name: master.name };
@@ -76,7 +77,7 @@ module.exports = async function adminRoutes(app) {
             const result = await activatePro(payment.masterId, { paymentId: payment.id });
             if (result) notifyMaster(result.master, '🎉 Оплата получена, тариф Pro активирован. Спасибо!');
         } else if (payment.method === 'turnkey') {
-            await prisma.payment.updateMany({ where: { id: payment.id, status: 'pending' }, data: { status: 'paid' } });
+            await prisma.payment.updateMany({ where: { id: payment.id, status: 'pending' }, data: { status: 'paid', paidAt: new Date() } });
         } else {
             throw httpError(400, 'Онлайн-платежи подтверждаются автоматически');
         }

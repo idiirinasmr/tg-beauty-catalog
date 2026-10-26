@@ -63,15 +63,30 @@ async function claimMaster(ctx) {
     if (!m.claimCode || code !== m.claimCode) return;
 
     const telegramId = BigInt(ctx.from.id);
-    const taken = await prisma.master.findUnique({ where: { telegramId } });
-    if (taken) {
-        await ctx.reply('Этот Telegram уже привязан к другому каталогу на платформе. Напишите тому, кто настраивал вам бота.');
+    const busy = 'Этот Telegram уже привязан к другому каталогу на платформе. Напишите тому, кто настраивал вам бота.';
+    let claimed;
+    try {
+        claimed = await prisma.$transaction(async tx => {
+            const taken = await tx.master.findUnique({
+                where: { telegramId },
+                include: { _count: { select: { services: true, bookings: true } } }
+            });
+            if (taken) {
+                // Мастер успел сам зарегистрироваться, но ничего не заполнил — пустую регистрацию убираем
+                const empty = !taken.botToken && !taken._count.services && !taken._count.bookings;
+                if (!empty) return null;
+                await tx.master.delete({ where: { id: taken.id } });
+            }
+            return tx.master.updateMany({ where: { id: m.id, claimCode: code }, data: { telegramId, claimCode: null } });
+        });
+    } catch (err) {
+        if (err.code !== 'P2002') throw err; // параллельная привязка того же Telegram
+        claimed = null;
+    }
+    if (claimed === null) {
+        await ctx.reply(busy);
         return;
     }
-    const claimed = await prisma.master.updateMany({
-        where: { id: m.id, claimCode: code },
-        data: { telegramId, claimCode: null }
-    });
     if (!claimed.count) return;
 
     // Middleware успел записать мастера как клиента — убираем

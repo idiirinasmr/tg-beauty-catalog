@@ -20,3 +20,4 @@ td .btn { min-height: 34px; }
 .turnkey-steps { padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 .turnkey-steps code { background: hsl(var(--muted)); padding: 1px 6px; border-radius: 6px; }
 .actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.contents { display: contents; }

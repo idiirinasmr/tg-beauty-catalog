@@ -75,6 +75,8 @@ $('#logout').addEventListener('click', () => {
 });
 
 const METHODS = { yukassa: 'ЮKassa', manual: 'Перевод', stripe: 'Stripe', turnkey: 'Под ключ' };
+const MANUAL_METHODS = ['manual', 'turnkey']; // эти платежи владелец подтверждает сам
+const state = { turnkeyPrice: '' };
 
 function masterActions(m) {
     let claim = '';
@@ -87,17 +89,23 @@ function masterActions(m) {
 }
 
 async function render() {
-    const [stats, masters, payments, mon, cfg] = await Promise.all([
-        api('/api/admin/stats'), api('/api/admin/masters'), api('/api/admin/payments'), api('/api/admin/monitoring'),
-        api('/api/auth/config')
+    const [stats, masters, payments, mon] = await Promise.all([
+        api('/api/admin/stats'), api('/api/admin/masters'), api('/api/admin/payments'), api('/api/admin/monitoring')
     ]);
     $('#view-login').hidden = true;
     $('#view-app').hidden = false;
 
+    // Цена «под ключ» из настроек сервера — подставляем один раз, форма не перерисовывается
+    if (state.turnkeyPrice === '') {
+        const cfg = await api('/api/auth/config').catch(() => ({}));
+        state.turnkeyPrice = cfg.turnkeyPrice ?? 0;
+        $('#turnkey-form').elements.price.value = state.turnkeyPrice;
+    }
+
     const backup = mon.lastBackup;
     const backupOk = backup?.ok && Date.now() - new Date(backup.createdAt) < 26 * 3600 * 1000;
 
-    $('#main').innerHTML = `
+    $('#summary').innerHTML = `
         <div class="page-head"><div><h2>Платформа</h2><p>Мастеров ${stats.masters} из ${stats.maxMasters}</p></div></div>
         <div class="stats">
             <div class="stat accent"><div class="stat-value">${rub(stats.revenue.month)}</div><div class="stat-label">выручка за 30 дней</div></div>
@@ -106,23 +114,9 @@ async function render() {
             <div class="stat"><div class="stat-value">${stats.bookingsTotal}</div><div class="stat-label">заявок (+${stats.bookingsToday} сегодня)</div></div>
         </div>
 
-        <form class="card form" id="turnkey-form">
-            <div class="card-head"><h3>Новый мастер под ключ</h3><span class="muted small">мастер ничего не делает — вы настраиваете за него</span></div>
-            <div class="turnkey-grid">
-                <label class="field"><span>Имя мастера *</span><input class="input" name="name" required maxlength="100" placeholder="Ольга Смирнова"></label>
-                <label class="field"><span>Специализация</span><input class="input" name="specialty" maxlength="150" placeholder="Брови и ресницы"></label>
-                <label class="field"><span>Телефон</span><input class="input" name="phone" type="tel" maxlength="30"></label>
-                <label class="field"><span>Адрес</span><input class="input" name="address" maxlength="200"></label>
-                <label class="field"><span>Цена настройки, ₽</span><input class="input" name="price" type="number" min="0" value="${cfg.turnkeyPrice}"></label>
-            </div>
-            <button class="btn btn-primary" type="submit">Создать и настроить</button>
-            <ol class="turnkey-steps muted small">
-                <li>«Создать и настроить» — откроется панель этого мастера: внесите услуги, фото, описание.</li>
-                <li>В @BotFather создайте бота для мастера (<code>/newbot</code>) и вставьте токен в разделе «Бот».</li>
-                <li>Здесь нажмите «Ссылка для мастера» и отправьте её мастеру — один раз нажать Start, чтобы получать заявки.</li>
-                <li>Получили оплату — в «Платежах» нажмите «Оплачено».</li>
-            </ol>
-        </form>
+    `;
+
+    $('#main').innerHTML = `
 
         <div class="card">
             <div class="card-head"><h3>Мониторинг</h3><span class="muted small">аптайм ${Math.round(mon.uptimeSec / 3600)} ч</span></div>
@@ -166,37 +160,63 @@ async function render() {
                     <td>${day(p.createdAt)}</td><td>${esc(p.master.name)}</td><td>${rub(p.amount)}</td>
                     <td>${METHODS[p.method] || esc(p.method)}</td>
                     <td><span class="badge ${p.status === 'paid' ? 'confirmed' : p.status === 'pending' ? 'new' : 'cancelled'}">${{ paid: 'оплачен', pending: 'ожидает', failed: 'ошибка' }[p.status] || esc(p.status)}</span>
-                        ${p.status === 'pending' && p.method !== 'yukassa' ? `<button class="btn btn-outline btn-sm" data-paid="${p.id}">Оплачено</button>` : ''}</td>
+                        ${p.status === 'pending' && MANUAL_METHODS.includes(p.method) ? `<button class="btn btn-outline btn-sm" data-paid="${p.id}">Оплачено</button>` : ''}</td>
                     <td>${p.periodEnd ? `${day(p.periodStart)} — ${day(p.periodEnd)}` : '—'}</td>
                 </tr>`).join('') || '<tr><td colspan="6" class="muted">Платежей пока нет</td></tr>'}</tbody>
             </table></div>
         </div>`;
 }
 
-/** Открыть панель мастера в режиме настройки (новая вкладка) */
-async function openAsMaster(masterId) {
-    const { token: masterToken } = await api(`/api/admin/masters/${masterId}/impersonate`, { method: 'POST' });
-    try { localStorage.setItem('beauty_master_token', masterToken); } catch (e) {}
-    window.open('/admin/#home', '_blank');
+/**
+ * Открыть панель мастера в режиме настройки.
+ * Вкладку открываем сразу по клику (иначе её заблокирует браузер), токен передаём
+ * во фрагменте ссылки: панель мастера хранит его только в своей вкладке (sessionStorage).
+ */
+function openBlankTab() {
+    return window.open('', '_blank');
+}
+
+async function openAsMaster(masterId, tab) {
+    try {
+        const { token: masterToken } = await api(`/api/admin/masters/${masterId}/impersonate`, { method: 'POST' });
+        tab.location.href = '/admin/#as=' + encodeURIComponent(masterToken);
+    } catch (err) {
+        tab?.close();
+        throw err;
+    }
 }
 
 document.addEventListener('submit', async e => {
     if (e.target.id !== 'turnkey-form') return;
     e.preventDefault();
-    const fd = new FormData(e.target);
+    const form = e.target;
+    const fd = new FormData(form);
     const body = Object.fromEntries([...fd].filter(([, v]) => v !== ''));
     if (body.price !== undefined) body.price = Number(body.price);
-    const btn = e.target.querySelector('[type=submit]');
+    const btn = form.querySelector('[type=submit]');
     btn.disabled = true;
+    const tab = openBlankTab();
+
+    let master;
     try {
-        const master = await api('/api/admin/masters', { method: 'POST', body });
-        toast(`Мастер «${master.name}» создан — открываю его панель`);
-        await openAsMaster(master.id);
-        await render();
+        master = await api('/api/admin/masters', { method: 'POST', body });
     } catch (err) {
+        tab?.close();
         toast(err.message, true);
         btn.disabled = false;
+        return;
     }
+    // Мастер создан — форму очищаем сразу, чтобы повторное нажатие не создало дубль
+    form.reset();
+    form.elements.price.value = state.turnkeyPrice;
+    btn.disabled = false;
+    try {
+        await openAsMaster(master.id, tab);
+        toast(`Мастер «${master.name}» создан — его панель открыта в новой вкладке`);
+    } catch (err) {
+        toast(`Мастер «${master.name}» создан, но панель не открылась. Нажмите «Настроить» в списке мастеров`, true);
+    }
+    await render();
 });
 
 document.addEventListener('click', async e => {
@@ -204,7 +224,7 @@ document.addEventListener('click', async e => {
     if (!el) return;
     try {
         if (el.dataset.impersonate) {
-            await openAsMaster(el.dataset.impersonate);
+            await openAsMaster(el.dataset.impersonate, openBlankTab());
         } else if (el.dataset.copy) {
             await navigator.clipboard.writeText(el.dataset.copy).catch(() => prompt('Скопируйте ссылку:', el.dataset.copy));
             toast('Ссылка скопирована — отправьте её мастеру');

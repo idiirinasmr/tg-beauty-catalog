@@ -203,12 +203,13 @@ model Payment {
   id          String    @id @default(uuid()) @db.Uuid
   masterId    String    @map("master_id") @db.Uuid
   amount      Int
-  method      String // yukassa | stripe | manual
+  method      String // yukassa | stripe | manual | turnkey
   status      String    @default("pending") // pending | paid | failed
   externalId  String?   @unique @map("external_id")
   periodStart DateTime? @map("period_start")
   periodEnd   DateTime? @map("period_end")
   createdAt   DateTime  @default(now()) @map("created_at")
+  paidAt      DateTime? @map("paid_at") // по ней считается выручка (заявка могла быть создана раньше)
 
   master Master @relation(fields: [masterId], references: [id], onDelete: Cascade)
 

@@ -29,7 +29,7 @@ async function overview() {
         prisma.booking.count({ where: { createdAt: { gte: today } } }),
         prisma.booking.count(),
         revenue(today), revenue(weekAgo), revenue(monthAgo), revenue(),
-        prisma.payment.count({ where: { status: 'paid', createdAt: { gte: today } } }),
+        prisma.payment.count({ where: { status: 'paid', paidAt: { gte: today } } }),
         prisma.master.findMany({
             where: { plan: 'pro', planExpiresAt: { gt: now, lt: new Date(now.getTime() + 7 * DAY) } },
             select: { id: true, name: true, planExpiresAt: true },

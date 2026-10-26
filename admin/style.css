@@ -468,11 +468,13 @@ input[type="color"].color-swatch { padding: 0; background: conic-gradient(red, y
 .turnkey-hint:hover { transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .turnkey-hint .i { color: hsl(38 75% 34%); }
 
+/* Полоса режима настройки и шапка закреплены вместе — высота полосы может быть любой */
+.sticky-head { position: sticky; top: 0; z-index: 25; }
+.sticky-head .topbar { position: static; }
+
 .impersonate-bar {
-    position: sticky; top: 0; z-index: 25;
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     padding: 8px 16px; font-size: 0.85rem;
     background: hsl(var(--accent)); color: #fff;
 }
 .impersonate-bar .btn { background: #fff; color: hsl(var(--accent)); }
-.impersonate-bar:not([hidden]) + .topbar { top: 52px; }

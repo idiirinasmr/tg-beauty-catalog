@@ -23,7 +23,7 @@ async function activatePro(masterId, { days = PERIOD_DAYS, method = 'manual', am
         const now = new Date();
         const start = master.plan === 'pro' && master.planExpiresAt > now ? master.planExpiresAt : now;
         const end = new Date(start.getTime() + days * DAY);
-        const paymentData = { status: 'paid', periodStart: start, periodEnd: end, amount };
+        const paymentData = { status: 'paid', paidAt: now, periodStart: start, periodEnd: end, amount };
 
         if (paymentId) {
             const claimed = await tx.payment.updateMany({ where: { id: paymentId, status: 'pending' }, data: paymentData });
@@ -41,7 +41,7 @@ async function activatePro(masterId, { days = PERIOD_DAYS, method = 'manual', am
 
 async function revenue(from) {
     const agg = await prisma.payment.aggregate({
-        where: { status: 'paid', ...(from ? { createdAt: { gte: from } } : {}) },
+        where: { status: 'paid', ...(from ? { paidAt: { gte: from } } : {}) },
         _sum: { amount: true }
     });
     return agg._sum.amount || 0;

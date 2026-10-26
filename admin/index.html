@@ -29,7 +29,7 @@
             <p class="auth-sub">Каталог услуг, онлайн-запись и бот, который отвечает клиентам, пока вы работаете.</p>
             <div id="login-widget" class="login-widget"></div>
             <p class="auth-hint" id="login-hint">Войдите через Telegram — пароль не нужен.</p>
-            <a class="turnkey-hint" target="_blank" rel="noopener" hidden></a>
+            <div class="turnkey-slot"></div>
             <form id="dev-login" class="dev-login" hidden>
                 <p class="auth-hint">Локальная разработка: вход без Telegram</p>
                 <div class="row">
@@ -58,7 +58,7 @@
                 <input class="input" name="address" maxlength="200" placeholder="ул. Тверская, 15, оф. 3"></label>
             <button class="btn btn-primary btn-block" type="submit">Создать мой каталог</button>
             <p class="auth-hint">Бесплатно: 5 услуг, 6 фото работ, приём заявок без ограничений.</p>
-            <a class="turnkey-hint" target="_blank" rel="noopener" hidden></a>
+            <div class="turnkey-slot"></div>
         </form>
     </section>
 
@@ -73,6 +73,7 @@
         </aside>
 
         <div class="main-wrap">
+            <div class="sticky-head">
             <div class="impersonate-bar" id="impersonate-bar" hidden>
                 <span>Режим настройки: вы заполняете каталог мастера <strong id="impersonate-name"></strong></span>
                 <button class="btn btn-sm" data-action="logout">Готово</button>
@@ -89,6 +90,7 @@
                     <svg class="i"><use href="icons.svg#external"/></svg><span>Мой каталог</span>
                 </a>
             </header>
+            </div>
             <main id="main" class="main"></main>
         </div>
 

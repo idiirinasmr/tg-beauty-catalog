@@ -117,9 +117,16 @@ function showView(name) {
     ['boot', 'login', 'register', 'app'].forEach(v => { $('#view-' + v).hidden = v !== name; });
 }
 
+// Токен режима настройки (владелец заполняет каталог за мастера) живёт только в своей
+// вкладке: две вкладки разных мастеров не перепутаются, собственная сессия не затирается.
+const IMPERSONATE_KEY = 'beauty_impersonate_token';
+
 function saveToken(token) {
     state.token = token;
-    try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {}
+    try {
+        if (isImpersonating()) sessionStorage.setItem(IMPERSONATE_KEY, token);
+        else localStorage.setItem(TOKEN_KEY, token);
+    } catch (e) {}
 }
 
 /** Данные из JWT (без проверки подписи — только для отображения) */
@@ -141,26 +148,29 @@ function loadConfig() {
     return configPromise;
 }
 
-/** «Настроим под ключ» на экранах входа и регистрации */
+/** Предложение «Настроим под ключ» — ссылка на Telegram владельца платформы */
+function turnkeyHint(cfg) {
+    return `<a class="turnkey-hint" href="https://t.me/${encodeURIComponent(cfg.supportTelegram)}" target="_blank" rel="noopener">
+        ${icon('sparkles', 'sm')}<span>Некогда разбираться? <strong>Настроим всё за вас</strong> за ${rub(cfg.turnkeyPrice)} — напишите нам</span></a>`;
+}
+
+/** Показать предложение на экранах входа и регистрации */
 async function showTurnkeyHints() {
     const cfg = await loadConfig();
     if (!cfg.supportTelegram) return;
-    document.querySelectorAll('.turnkey-hint').forEach(a => {
-        a.href = 'https://t.me/' + encodeURIComponent(cfg.supportTelegram);
-        a.innerHTML = `${icon('sparkles', 'sm')}<span>Некогда разбираться? <strong>Настроим всё за вас</strong> за ${rub(cfg.turnkeyPrice)} — напишите нам</span>`;
-        a.hidden = false;
-    });
+    document.querySelectorAll('.turnkey-slot').forEach(slot => { slot.innerHTML = turnkeyHint(cfg); });
 }
 
 function logout() {
     const wasImpersonating = isImpersonating();
     state.token = null;
-    try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
     if (wasImpersonating) {
+        try { sessionStorage.removeItem(IMPERSONATE_KEY); } catch (e) {}
         window.close(); // вкладка открыта из панели платформы
         location.href = '/platform/';
         return;
     }
+    try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
     if (tg?.initData) {
         tg.close();
         return;
@@ -169,6 +179,16 @@ function logout() {
 }
 
 async function authenticate() {
+    // 0) Режим настройки из панели платформы: токен приходит во фрагменте #as=...
+    if (location.hash.startsWith('#as=')) {
+        const token = decodeURIComponent(location.hash.slice(4));
+        history.replaceState(null, '', location.pathname + location.search + '#home');
+        return token;
+    }
+    try {
+        const impersonated = sessionStorage.getItem(IMPERSONATE_KEY);
+        if (impersonated) return impersonated;
+    } catch (e) {}
     // 1) Возврат с Telegram Login Widget: ?id=...&hash=...
     if (params.get('hash') && params.get('id')) {
         const data = {};
@@ -383,9 +403,7 @@ VIEWS.home = async () => {
                     <span class="check-box">${icon('check', 'sm')}</span><span class="check-text">${s.text}</span>
                     ${s.done ? '' : icon('chevron', 'sm')}</a>`).join('')}
             </div>
-            ${cfg.supportTelegram && !isImpersonating() ? `
-            <a class="turnkey-hint" href="https://t.me/${esc(cfg.supportTelegram)}" target="_blank" rel="noopener">
-                ${icon('sparkles', 'sm')}<span>Некогда? <strong>Настроим всё за вас</strong> за ${rub(cfg.turnkeyPrice)} — напишите нам</span></a>` : ''}
+            ${cfg.supportTelegram && !isImpersonating() ? turnkeyHint(cfg) : ''}
         </div>` : ''}
         ${p.botUsername ? `
         <div class="card">

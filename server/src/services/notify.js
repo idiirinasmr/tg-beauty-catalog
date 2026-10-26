@@ -35,8 +35,17 @@ async function sendFromMasterBot(masterId, chatId, text, { priority = 'high', ph
     }
 }
 
+function htmlToText(html) {
+    return String(html).replace(/<[^>]*>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+}
+
 async function notifyMaster(master, text, extra = {}) {
-    if (!master.telegramId) return false; // мастер «под ключ» ещё не открыл свою ссылку
+    if (!master.telegramId) {
+        // Мастер «под ключ» ещё не открыл ссылку привязки — чтобы заявка не потерялась, шлём владельцу
+        const { notifyAdmin } = require('./admin-bot');
+        notifyAdmin(`📭 Для мастера ${master.name} (ещё не привязал Telegram):\n\n${htmlToText(text)}`);
+        return false;
+    }
     return sendFromMasterBot(master.id, master.telegramId, text, { priority: 'critical', ...extra });
 }
 
