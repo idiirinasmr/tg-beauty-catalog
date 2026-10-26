@@ -904,3 +904,94 @@ body {
         margin: 0 auto;
     }
 }
+
+/* ===========================
+   Режим платформы (данные из API)
+   =========================== */
+
+[hidden] { display: none !important; }
+
+.profile-logo {
+    max-width: 160px;
+    max-height: 56px;
+    object-fit: contain;
+    margin-bottom: 12px;
+}
+
+.profile-avatar { overflow: hidden; }
+
+.profile-avatar img,
+.service-item-icon img,
+.detail-image-placeholder img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.service-item-icon { overflow: hidden; }
+
+.profile-about {
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--tg-theme-text-color, #000000);
+    max-width: 360px;
+    margin: -6px 0 16px;
+    white-space: pre-line;
+}
+
+.empty-text {
+    padding: 20px 16px;
+    text-align: center;
+    color: var(--tg-theme-hint-color, #999999);
+    font-size: 14px;
+}
+
+.powered-by {
+    text-align: center;
+    font-size: 12px;
+    color: var(--tg-theme-hint-color, #999999);
+    padding: 8px 16px 16px;
+    opacity: 0.7;
+}
+
+/* --- Skeleton при загрузке каталога --- */
+@keyframes skeleton-shimmer {
+    0% { background-position: -200px 0; }
+    100% { background-position: calc(200px + 100%) 0; }
+}
+
+.skeleton,
+body.loading .profile-name,
+body.loading .profile-specialty,
+body.loading .profile-stats,
+body.loading .profile-avatar {
+    color: transparent !important;
+    border-radius: 8px;
+    background: linear-gradient(90deg,
+        rgba(153, 153, 153, 0.12) 0px,
+        rgba(153, 153, 153, 0.24) 80px,
+        rgba(153, 153, 153, 0.12) 160px) !important;
+    background-size: 200px 100% !important;
+    animation: skeleton-shimmer 1.2s ease-in-out infinite;
+}
+
+body.loading .profile-avatar { border-radius: 50%; }
+body.loading .profile-name { min-width: 160px; }
+body.loading .profile-specialty { min-width: 120px; }
+body.loading .profile-address,
+body.loading .profile-actions,
+body.loading #section-reviews { visibility: hidden; }
+body.loading .profile-avatar * { visibility: hidden; }
+
+.skeleton-row {
+    height: 60px;
+    margin: 0 16px 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton,
+    body.loading .profile-name,
+    body.loading .profile-specialty,
+    body.loading .profile-stats,
+    body.loading .profile-avatar { animation: none; }
+}

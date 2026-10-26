@@ -1,0 +1,20 @@
+# systemd-юнит: /etc/systemd/system/beauty-saas.service
+# Установка: sudo systemctl enable --now beauty-saas
+[Unit]
+Description=BeautyApp SaaS (API + боты)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=beauty
+WorkingDirectory=/opt/beauty-saas/server
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+# Ограничение памяти: VPS 1-2 ГБ
+MemoryMax=700M
+
+[Install]
+WantedBy=multi-user.target

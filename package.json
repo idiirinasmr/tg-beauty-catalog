@@ -1,0 +1,11 @@
+{
+  "name": "beautyapp-platform",
+  "private": true,
+  "description": "Сборка для Vercel. Сам сервер — в server/ (свои зависимости и скрипты)",
+  "scripts": {
+    "vercel-build": "node server/scripts/build-vercel.js"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}

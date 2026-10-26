@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Платформа — BeautyApp</title>
+    <meta name="robots" content="noindex">
+    <link rel="icon" type="image/svg+xml" href="/admin/favicon.svg">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="/admin/style.css">
+    <link rel="stylesheet" href="platform.css">
+</head>
+<body>
+    <section id="view-login" class="auth" hidden>
+        <div class="auth-card fade-up">
+            <div class="brand"><span class="brand-mark">B</span> Платформа</div>
+            <h1 class="auth-title">Панель<br><em>владельца</em></h1>
+            <p class="auth-sub">Вход только для владельца платформы — через ваш Telegram.</p>
+            <div id="login-widget" class="login-widget"></div>
+            <form id="dev-login" class="dev-login" hidden>
+                <p class="auth-hint">Локальная разработка</p>
+                <div class="row">
+                    <input class="input" name="id" inputmode="numeric" placeholder="Telegram ID" required>
+                    <button class="btn btn-primary" type="submit">Войти</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <div id="view-app" hidden>
+        <header class="topbar">
+            <div class="brand"><span class="brand-mark">B</span> Платформа</div>
+            <button class="btn btn-ghost btn-sm" id="logout">Выйти</button>
+        </header>
+        <main class="main wide">
+            <div id="summary" class="contents"></div>
+            <form class="card form" id="turnkey-form">
+                <div class="card-head"><h3>Новый мастер под ключ</h3><span class="muted small">мастер ничего не делает — вы настраиваете за него</span></div>
+                <div class="turnkey-grid">
+                    <label class="field"><span>Имя мастера *</span><input class="input" name="name" required maxlength="100" placeholder="Ольга Смирнова"></label>
+                    <label class="field"><span>Специализация</span><input class="input" name="specialty" maxlength="150" placeholder="Брови и ресницы"></label>
+                    <label class="field"><span>Телефон</span><input class="input" name="phone" type="tel" maxlength="30"></label>
+                    <label class="field"><span>Адрес</span><input class="input" name="address" maxlength="200"></label>
+                    <label class="field"><span>Цена настройки, ₽</span><input class="input" name="price" type="number" min="0" placeholder="обсуждается"></label>
+                </div>
+                <button class="btn btn-primary" type="submit">Создать и настроить</button>
+                <ol class="turnkey-steps muted small">
+                    <li>«Создать и настроить» — откроется панель этого мастера: внесите услуги, фото, описание.</li>
+                    <li>В @BotFather создайте бота для мастера (<code>/newbot</code>) и вставьте токен в разделе «Бот».</li>
+                    <li>Здесь нажмите «Ссылка для мастера» и отправьте её мастеру — один раз нажать Start, чтобы получать заявки.</li>
+                    <li>Получили оплату — в «Платежах» нажмите «Оплачено».</li>
+                </ol>
+            </form>
+            <div id="main" class="contents"></div>
+        </main>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="platform.js"></script>
+</body>
+</html>

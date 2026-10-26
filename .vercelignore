@@ -1,0 +1,10 @@
+# Не загружать на Vercel при `vercel deploy`: секреты, локальная БД, загрузки, зависимости
+.env
+server/.env
+server/secrets/
+server/.dev-db/
+server/uploads/
+node_modules/
+server/node_modules/
+public/
+.git/
