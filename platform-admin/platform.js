@@ -98,7 +98,7 @@ async function render() {
     // Цена «под ключ» из настроек сервера — подставляем один раз, форма не перерисовывается
     if (state.turnkeyPrice === '') {
         const cfg = await api('/api/auth/config').catch(() => ({}));
-        state.turnkeyPrice = cfg.turnkeyPrice ?? 0;
+        state.turnkeyPrice = cfg.turnkeyPrice || '';
         $('#turnkey-form').elements.price.value = state.turnkeyPrice;
     }
 
@@ -157,10 +157,10 @@ async function render() {
             <div class="table-wrap"><table>
                 <thead><tr><th>Дата</th><th>Мастер</th><th>Сумма</th><th>Способ</th><th>Статус</th><th>Период</th></tr></thead>
                 <tbody>${payments.map(p => `<tr>
-                    <td>${day(p.createdAt)}</td><td>${esc(p.master.name)}</td><td>${rub(p.amount)}</td>
+                    <td>${day(p.createdAt)}</td><td>${esc(p.master.name)}</td><td>${p.amount ? rub(p.amount) : 'обсуждается'}</td>
                     <td>${METHODS[p.method] || esc(p.method)}</td>
                     <td><span class="badge ${p.status === 'paid' ? 'confirmed' : p.status === 'pending' ? 'new' : 'cancelled'}">${{ paid: 'оплачен', pending: 'ожидает', failed: 'ошибка' }[p.status] || esc(p.status)}</span>
-                        ${p.status === 'pending' && MANUAL_METHODS.includes(p.method) ? `<button class="btn btn-outline btn-sm" data-paid="${p.id}">Оплачено</button>` : ''}</td>
+                        ${p.status === 'pending' && MANUAL_METHODS.includes(p.method) ? `<button class="btn btn-outline btn-sm" data-paid="${p.id}" data-amount="${p.amount || ''}">Оплачено</button>` : ''}</td>
                     <td>${p.periodEnd ? `${day(p.periodStart)} — ${day(p.periodEnd)}` : '—'}</td>
                 </tr>`).join('') || '<tr><td colspan="6" class="muted">Платежей пока нет</td></tr>'}</tbody>
             </table></div>
@@ -229,8 +229,12 @@ document.addEventListener('click', async e => {
             await navigator.clipboard.writeText(el.dataset.copy).catch(() => prompt('Скопируйте ссылку:', el.dataset.copy));
             toast('Ссылка скопирована — отправьте её мастеру');
         } else if (el.dataset.paid) {
+            // Цена «под ключ» договорная — уточняем сумму при отметке оплаты
+            const amount = prompt('Сколько заплатил мастер, ₽?', el.dataset.amount || '');
+            if (amount === null) return;
+            if (!/^d+$/.test(amount.trim())) return toast('Введите сумму числом', true);
             el.disabled = true;
-            await api(`/api/admin/payments/${el.dataset.paid}/paid`, { method: 'POST' });
+            await api(`/api/admin/payments/${el.dataset.paid}/paid`, { method: 'POST', body: { amount: Number(amount) } });
             toast('Оплата отмечена');
             await render();
         }

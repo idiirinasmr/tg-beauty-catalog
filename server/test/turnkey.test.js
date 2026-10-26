@@ -147,3 +147,15 @@ test('настройка под ключ: мастер ничего не дел�
         assert.strictEqual(after - before, 3000);
     });
 });
+
+test('договорная цена: сумма указывается при отметке оплаты', async () => {
+    const admin = await login(ADMIN_ID);
+    const created = await call('POST', '/api/admin/masters', { token: admin, body: { name: 'Под ключ Договорная', price: 0 } });
+    const payment = await prisma.payment.findFirst({ where: { masterId: created.body.id } });
+    assert.strictEqual(payment.amount, 0);
+    assert.strictEqual((await call('POST', `/api/admin/payments/${payment.id}/paid`, { token: admin, body: { amount: -5 } })).status, 400);
+    assert.strictEqual((await call('POST', `/api/admin/payments/${payment.id}/paid`, { token: admin, body: { amount: 4500 } })).status, 200);
+    const paid = await prisma.payment.findUnique({ where: { id: payment.id } });
+    assert.strictEqual(paid.status, 'paid');
+    assert.strictEqual(paid.amount, 4500);
+});

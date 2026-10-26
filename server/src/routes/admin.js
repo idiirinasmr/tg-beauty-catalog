@@ -69,15 +69,22 @@ module.exports = async function adminRoutes(app) {
     });
 
     // Отметить разовую оплату (настройка под ключ или перевод за Pro)
-    app.post('/api/admin/payments/:id/paid', { schema: { params: uuidParam } }, async request => {
+    // amount — фактическая сумма (цена «под ключ» договорная); без неё остаётся сумма из заявки
+    app.post('/api/admin/payments/:id/paid', {
+        schema: {
+            params: uuidParam,
+            body: { type: ['object', 'null'], properties: { amount: { type: 'integer', minimum: 0, maximum: 1000000 } }, additionalProperties: false }
+        }
+    }, async request => {
+        const amountOverride = request.body?.amount;
         const payment = await prisma.payment.findUnique({ where: { id: request.params.id } });
         if (!payment || payment.status !== 'pending') throw httpError(404, 'Ожидающий платёж не найден');
 
         if (payment.method === 'manual') {
-            const result = await activatePro(payment.masterId, { paymentId: payment.id });
+            const result = await activatePro(payment.masterId, { paymentId: payment.id, amount: amountOverride ?? payment.amount });
             if (result) notifyMaster(result.master, '🎉 Оплата получена, тариф Pro активирован. Спасибо!');
         } else if (payment.method === 'turnkey') {
-            await prisma.payment.updateMany({ where: { id: payment.id, status: 'pending' }, data: { status: 'paid', paidAt: new Date() } });
+            await prisma.payment.updateMany({ where: { id: payment.id, status: 'pending' }, data: { status: 'paid', paidAt: new Date(), amount: amountOverride ?? payment.amount } });
         } else {
             throw httpError(400, 'Онлайн-платежи подтверждаются автоматически');
         }

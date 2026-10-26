@@ -151,7 +151,7 @@ function loadConfig() {
 /** Предложение «Настроим под ключ» — ссылка на Telegram владельца платформы */
 function turnkeyHint(cfg) {
     return `<a class="turnkey-hint" href="https://t.me/${encodeURIComponent(cfg.supportTelegram)}" target="_blank" rel="noopener">
-        ${icon('sparkles', 'sm')}<span>Некогда разбираться? <strong>Настроим всё за вас</strong> за ${rub(cfg.turnkeyPrice)} — напишите нам</span></a>`;
+        ${icon('sparkles', 'sm')}<span>Некогда разбираться? <strong>Настроим всё за вас</strong>, ${cfg.turnkeyPrice ? 'за ' + rub(cfg.turnkeyPrice) : 'стоимость обсуждается'} — напишите нам</span></a>`;
 }
 
 /** Показать предложение на экранах входа и регистрации */

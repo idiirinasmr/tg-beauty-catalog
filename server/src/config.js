@@ -63,7 +63,7 @@ const config = {
     manualPaymentDetails: env.MANUAL_PAYMENT_DETAILS || '',
 
     // Настройка под ключ: владелец сам заполняет каталог мастера (разовая оплата)
-    turnkeyPrice: Number(env.TURNKEY_PRICE || 2000),
+    turnkeyPrice: Number(env.TURNKEY_PRICE || 0), // 0 — «стоимость обсуждается», сумма вводится при оплате
     supportTelegram: (env.SUPPORT_TELEGRAM || '').replace(/^@/, ''),
 
     devLogin: isDev && env.DEV_LOGIN === '1',
