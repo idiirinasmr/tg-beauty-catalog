@@ -28,6 +28,11 @@ async function send(masterId, chatId, text, { priority = 'high', photo, ...extra
             : api.sendMessage(String(chatId), text, { parse_mode: 'HTML', ...extra }), priority);
         return true;
     } catch (err) {
+        // 401: токен бота отозван в BotFather — отключаем бота и сообщаем владельцу
+        if (botManager.isUnauthorized(err)) {
+            await botManager.markBotDead(masterId);
+            return false;
+        }
         // 403: пользователь заблокировал бота или не начинал с ним диалог
         if (err instanceof GrammyError && err.error_code === 403) {
             await prisma.client.updateMany({

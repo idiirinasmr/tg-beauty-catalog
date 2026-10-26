@@ -25,11 +25,11 @@ const CLIENT_ID = 8800880088;
 let app, masterId;
 
 const hmac = (label, value) => crypto.createHmac('sha256', config.jwtSecret).update(`${label}:${value}`).digest('hex');
-const hookId = hmac('hook', BOT_ID).slice(0, 40);
+const hookId = require('../src/services/bot-manager').hookIdFor(BOT_ID);
 const secret = hmac('secret', BOT_ID).slice(0, 64);
 
 async function cleanup() {
-    await prisma.master.deleteMany({ where: { botId: BigInt(BOT_ID) } });
+    await prisma.master.deleteMany({ where: { name: 'Serverless Мастер' } });
 }
 
 test.before(async () => {
@@ -94,12 +94,15 @@ test('вебхук: бот мастера «просыпается» и обра
     const client = await prisma.client.findFirst({ where: { masterId, telegramId: BigInt(CLIENT_ID) } });
     assert.ok(client, 'клиент записан');
     assert.strictEqual(client.firstName, 'Клиентка');
+
+    // Telegram ответил 401 на фейковый токен — бот считается отозванным и отключается
+    await flush();
+    const master = await prisma.master.findUnique({ where: { id: masterId } });
+    assert.strictEqual(master.botToken, null, 'бот с недействительным токеном отключён');
 });
 
-test('статус бота берётся из БД, а не из памяти процесса', async () => {
+test('статус бота берётся из БД, а не из памяти процесса', () => {
     const botManager = require('../src/services/bot-manager');
-    const master = await prisma.master.findUnique({ where: { id: masterId } });
-    assert.strictEqual(botManager.isActive(master), true);
-    assert.strictEqual(botManager.isActive({ ...master, botToken: null }), false);
-    assert.ok(await botManager.activeCount() >= 1);
+    assert.strictEqual(botManager.isActive({ id: masterId, botToken: 'enc' }), true);
+    assert.strictEqual(botManager.isActive({ id: masterId, botToken: null }), false);
 });

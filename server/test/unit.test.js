@@ -48,3 +48,11 @@ test('FAQ: поиск по основам слов', () => {
     assert.strictEqual(findAnswer(faq, 'Есть ли парковки рядом')?.answer, 'C');
     assert.strictEqual(findAnswer(faq, 'Привет'), null);
 });
+
+test('заголовки безопасности в vercel.json совпадают с серверными', () => {
+    const { SECURITY_HEADERS } = require('../src/security-headers');
+    const vercel = require('../../vercel.json');
+    const statics = vercel.headers.find(h => h.source.includes('admin'));
+    const fromVercel = Object.fromEntries(statics.headers.map(h => [h.key, h.value]));
+    assert.deepStrictEqual(fromVercel, SECURITY_HEADERS);
+});

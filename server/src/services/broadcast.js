@@ -45,6 +45,12 @@ async function sendBatch(broadcastId) {
         });
 
         await Promise.all(pending.map(async r => {
+            // «Бронируем» получателя в БД: на Vercel эту же рассылку может параллельно
+            // досылать другой экземпляр (cron) — сообщение должно уйти ровно один раз
+            const claimed = await prisma.broadcastRecipient.updateMany({
+                where: { id: r.id, status: 'pending' }, data: { status: 'sending' }
+            });
+            if (!claimed.count) return;
             const ok = await sendFromMasterBot(broadcast.masterId, r.telegramId, broadcast.text, {
                 priority: 'low',
                 photo: broadcast.imageUrl || undefined
@@ -52,7 +58,7 @@ async function sendBatch(broadcastId) {
             await prisma.broadcastRecipient.update({ where: { id: r.id }, data: { status: ok ? 'sent' : 'failed' } });
         }));
 
-        const left = await prisma.broadcastRecipient.count({ where: { broadcastId, status: 'pending' } });
+        const left = await prisma.broadcastRecipient.count({ where: { broadcastId, status: { in: ['pending', 'sending'] } } });
         if (left) return; // остаток дошлёт следующий запуск
 
         const sent = await prisma.broadcastRecipient.count({ where: { broadcastId, status: 'sent' } });

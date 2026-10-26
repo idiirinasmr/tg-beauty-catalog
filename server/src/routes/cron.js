@@ -23,8 +23,8 @@ module.exports = async function cronRoutes(app) {
     const handler = async request => {
         checkSecret(request);
         const started = Date.now();
-        await jobs[request.params.job]();
-        return { ok: true, ms: Date.now() - started };
+        const { failed } = await jobs[request.params.job]();
+        return { ok: failed.length === 0, failed, ms: Date.now() - started };
     };
     // Vercel Cron шлёт GET, pg_net в Supabase — POST
     app.get('/api/cron/:job', { schema: { params }, config: { rateLimit: false } }, handler);

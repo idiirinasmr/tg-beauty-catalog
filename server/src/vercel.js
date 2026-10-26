@@ -11,11 +11,16 @@ const { flush } = require('./utils/background');
 let ready;
 
 module.exports = async function handler(req, res) {
-    ready ||= buildApp().ready().catch(err => {
+    ready ||= (async () => {
+        const app = buildApp();
+        await app.ready();
+        return app;
+    })().catch(err => {
         ready = null; // следующий запрос попробует снова
         throw err;
     });
     const app = await ready;
-    waitUntil(new Promise(resolve => res.on('finish', resolve)).then(flush));
+    // 'close' срабатывает и после обычного ответа, и при обрыве соединения
+    waitUntil(new Promise(resolve => res.on('close', resolve)).then(flush));
     app.server.emit('request', req, res);
 };

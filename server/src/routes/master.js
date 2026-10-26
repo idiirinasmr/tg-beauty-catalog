@@ -18,6 +18,7 @@ const broadcast = require('../services/broadcast');
 const { yukassaEnabled, PERIOD_DAYS } = require('../services/payment');
 const { issueToken } = require('./auth');
 
+const BROADCASTS_PER_HOUR = 5;
 const idParam = { type: 'object', required: ['id'], properties: { id: { type: 'string', format: 'uuid' } } };
 const str = max => ({ type: 'string', maxLength: max });
 
@@ -354,11 +355,13 @@ module.exports = async function masterRoutes(app) {
             include: { _count: { select: { recipients: true } } }
         }));
 
-        scoped.post('/api/master/broadcast', {
-            preHandler: requirePro,
-            config: { rateLimit: { max: 5, timeWindow: '1 hour' } }
-        }, async (request, reply) => {
+        scoped.post('/api/master/broadcast', { preHandler: requirePro }, async (request, reply) => {
             if (!botManager.isActive(request.master)) throw httpError(400, 'Сначала подключите бота');
+            // Лимит считается по БД, а не в памяти процесса: на Vercel экземпляров может быть несколько
+            const lastHour = await prisma.broadcast.count({
+                where: { masterId: request.master.id, createdAt: { gte: new Date(Date.now() - 60 * 60 * 1000) } }
+            });
+            if (lastHour >= BROADCASTS_PER_HOUR) throw httpError(429, 'Не больше 5 рассылок в час — попробуйте позже');
 
             // Принимаем и JSON { text }, и multipart (text + фото)
             let text;

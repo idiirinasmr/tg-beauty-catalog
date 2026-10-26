@@ -18,10 +18,11 @@ function run(cmd) {
 }
 
 run('npx prisma generate');
-if (process.env.DIRECT_URL) {
+// Миграции — только при публикации основной версии: тестовые сборки веток не должны менять рабочую базу
+if (process.env.VERCEL_ENV === 'production' && process.env.DIRECT_URL) {
     run('npx prisma migrate deploy');
 } else {
-    console.warn('DIRECT_URL не задан — миграции пропущены');
+    console.log('Миграции пропущены (не production или нет DIRECT_URL)');
 }
 
 // Простое рекурсивное копирование: fs.cpSync на Windows падает на путях с кириллицей

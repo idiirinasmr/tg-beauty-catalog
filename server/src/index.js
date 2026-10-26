@@ -20,6 +20,7 @@ const botManager = require('./services/bot-manager');
 const adminBot = require('./services/admin-bot');
 const broadcast = require('./services/broadcast');
 const jobs = require('./services/jobs');
+const { SECURITY_HEADERS } = require('./security-headers');
 
 const ROOT = path.join(__dirname, '..', '..');
 
@@ -43,18 +44,7 @@ function buildApp() {
 
     // Заголовки безопасности (XSS, кликджекинг). Telegram-скрипты и iframe входа разрешены.
     app.addHook('onSend', async (request, reply) => {
-        reply.header('X-Content-Type-Options', 'nosniff');
-        reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-        reply.header('Content-Security-Policy', [
-            "default-src 'self'",
-            "script-src 'self' https://telegram.org",
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-            "font-src 'self' https://fonts.gstatic.com",
-            "img-src 'self' data: blob: https:",
-            "connect-src 'self'",
-            'frame-src https://oauth.telegram.org',
-            "frame-ancestors 'self' https://web.telegram.org https://*.telegram.org"
-        ].join('; '));
+        reply.headers(SECURITY_HEADERS);
     });
 
     app.setErrorHandler((err, request, reply) => {
@@ -116,8 +106,10 @@ function buildApp() {
 // по HTTP: /api/cron/tick (Supabase pg_cron) и /api/cron/daily (Vercel Cron), см. routes/cron.js
 function startCron() {
     const tz = { timezone: config.timezone };
-    cron.schedule('*/5 * * * *', () => jobs.tick().catch(console.error), tz);  // напоминания, отзывы, рассылки
-    cron.schedule('0 21 * * *', () => jobs.daily().catch(console.error), tz);  // подписки, отчёт, бэкапы
+    cron.schedule('*/5 * * * *', jobs.tick, tz);         // напоминания, отзывы, рассылки
+    cron.schedule('0 9 * * *', jobs.backups, tz);        // проверка бэкапа (backup.sh в 03:00)
+    cron.schedule('0 10 * * *', jobs.subscriptions, tz); // просроченные подписки
+    cron.schedule('0 21 * * *', jobs.report, tz);        // отчёт владельцу
 }
 
 async function main() {

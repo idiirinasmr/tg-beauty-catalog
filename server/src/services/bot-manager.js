@@ -2,14 +2,16 @@
  * Управление ботами: один процесс — много ботов (боты мастеров + бот владельца).
  *
  * Режимы (BOT_MODE):
- *  - webhook (прод): один маршрут POST /bot/:hookId, hookId — непредсказуемый HMAC от bot_id,
- *    плюс заголовок X-Telegram-Bot-Api-Secret-Token. Ответ 200 сразу, обработка в фоне,
- *    дедупликация по update_id.
+ *  - webhook (прод): один маршрут POST /bot/:hookId. hookId = "<bot_id>_<HMAC>", плюс заголовок
+ *    X-Telegram-Bot-Api-Secret-Token (тоже HMAC от bot_id). Чужие запросы отсекаются до обращения
+ *    к БД. Дедупликация по update_id.
  *  - polling (локально): bot.start() для каждого бота.
  *
- * На Vercel (config.serverless) боты не живут в памяти: при каждом апдейте бот «просыпается»
- * по hookId (wake), а для отправки сообщений Api создаётся по токену из БД (getApi).
- * Вебхук ставится один раз — при подключении бота (launch) или в cron (ensureAdminWebhook).
+ * На Vercel (config.serverless) боты не живут в памяти: на каждый апдейт бот «просыпается»
+ * заново по bot_id из БД (wake), а для отправки Api создаётся по актуальному токену (getApi).
+ * Ничего не кэшируется между запросами — иначе тёплый экземпляр мог бы работать со старым
+ * владельцем бота или старым токеном. Вебхук ставится при подключении бота (launch)
+ * или в cron (ensureAdminWebhook).
  */
 
 const crypto = require('crypto');
@@ -18,24 +20,38 @@ const { autoRetry } = require('@grammyjs/auto-retry');
 const config = require('../config');
 const prisma = require('../utils/db');
 const { decrypt } = require('../utils/encrypt');
+const { track } = require('../utils/background');
 
 const ADMIN_KEY = 'admin';
-const bots = new Map();     // key (masterId | 'admin') -> entry
-const hooks = new Map();    // hookId -> entry
-const apis = new Map();     // key -> Api (serverless: только для отправки)
+const bots = new Map();     // key (masterId | 'admin') -> entry (только свой сервер)
+const hooks = new Map();    // hookId -> entry (только свой сервер)
 const DEDUP_SIZE = 200;
 const ALLOWED_UPDATES = ['message', 'callback_query'];
+const HOOK_RE = /^(\d{5,15})_([0-9a-f]{32})$/;
 
 function hmac(label, value) {
     return crypto.createHmac('sha256', config.jwtSecret).update(`${label}:${value}`).digest('hex');
 }
 
 function hookIdFor(botId) {
-    return hmac('hook', botId).slice(0, 40);
+    return `${botId}_${hmac('hook', botId).slice(0, 32)}`;
 }
 
 function secretFor(botId) {
     return hmac('secret', botId).slice(0, 64);
+}
+
+function safeEqual(a, b) {
+    const bufA = Buffer.from(String(a || ''));
+    const bufB = Buffer.from(String(b || ''));
+    return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
+/** bot_id из hookId, если и hookId, и секрет из заголовка подписаны нашим ключом; иначе null */
+function verifyHook(hookId, secretHeader) {
+    const m = HOOK_RE.exec(hookId);
+    if (!m || !safeEqual(hookId, hookIdFor(m[1])) || !safeEqual(secretHeader, secretFor(m[1]))) return null;
+    return m[1];
 }
 
 function miniAppUrl(botUsername) {
@@ -66,18 +82,14 @@ function isUnauthorized(err) {
     return err instanceof GrammyError && err.error_code === 401;
 }
 
-function register(key, bot, setup, onDead) {
+/** Навесить обработчики. Возвращает entry; в карты процесса не кладёт */
+function buildEntry(key, bot, setup, onDead) {
     setup(bot);
     bot.catch(err => {
         console.error(`[bot ${bot.botInfo.username}]`, err.error?.message || err.message);
+        if (isUnauthorized(err.error) && onDead) track(Promise.resolve().then(onDead));
     });
-    const entry = {
-        key, bot, onDead, username: bot.botInfo.username, seen: [],
-        hookId: hookIdFor(bot.botInfo.id), secret: secretFor(bot.botInfo.id)
-    };
-    bots.set(key, entry);
-    hooks.set(entry.hookId, entry);
-    return entry;
+    return { key, bot, onDead, username: bot.botInfo.username, seen: [], hookId: hookIdFor(bot.botInfo.id), secret: secretFor(bot.botInfo.id) };
 }
 
 /**
@@ -88,14 +100,19 @@ async function launch(key, token, setup, onDead) {
     await stop(key);
     const bot = createBot(token);
     await bot.init(); // getMe; бросит 401 при неверном токене
-    const entry = register(key, bot, setup, onDead);
+    const entry = buildEntry(key, bot, setup, onDead);
 
     if (config.botMode === 'webhook') {
         await bot.api.setWebhook(`${config.appUrl}/bot/${entry.hookId}`, {
             secret_token: entry.secret,
             allowed_updates: ALLOWED_UPDATES
         });
-    } else {
+    }
+    if (config.serverless) return entry; // на Vercel в памяти не держим
+
+    bots.set(key, entry);
+    hooks.set(entry.hookId, entry);
+    if (config.botMode !== 'webhook') {
         await bot.api.deleteWebhook().catch(() => {});
         bot.start({
             allowed_updates: ALLOWED_UPDATES,
@@ -106,10 +123,12 @@ async function launch(key, token, setup, onDead) {
 }
 
 async function handleDead(entry, err) {
-    if (isUnauthorized(err) && bots.get(entry.key) === entry) {
+    // handleUpdate оборачивает ошибку в BotError — настоящая ошибка Telegram в err.error
+    const cause = err?.error ?? err;
+    if (isUnauthorized(cause) && (config.serverless || bots.get(entry.key) === entry)) {
         console.error(`[bot] @${entry.username}: токен недействителен`);
         await stop(entry.key);
-        entry.onDead?.();
+        await entry.onDead?.();
     } else if (err) {
         console.error(`[bot] @${entry.username}:`, err.message);
     }
@@ -117,12 +136,10 @@ async function handleDead(entry, err) {
 
 async function stop(key) {
     const entry = bots.get(key);
-    apis.delete(key);
     if (!entry) {
         // Vercel: бота нет в памяти, но вебхук в Telegram мог быть поставлен — снимаем по токену
         if (config.serverless && key !== ADMIN_KEY) {
             const api = await getApi(key).catch(() => null);
-            apis.delete(key);
             await api?.deleteWebhook().catch(() => {});
         }
         return;
@@ -135,36 +152,27 @@ async function stop(key) {
     } catch { /* бот уже мёртв — не важно */ }
 }
 
-/** Vercel: найти бота по hookId и поднять его обработчики (без getMe) */
-async function wake(hookId) {
-    if (config.adminBotToken) {
-        const adminId = config.adminBotToken.split(':')[0];
-        if (hookIdFor(adminId) === hookId) {
-            const { setupAdminBot } = require('./admin-bot');
-            const bot = createBot(config.adminBotToken, knownBotInfo(adminId, config.adminBotUsername));
-            return register(ADMIN_KEY, bot, setupAdminBot);
-        }
+/** Vercel: поднять бота по bot_id (одна выборка по уникальному индексу, без getMe) */
+async function wake(botId) {
+    if (config.adminBotToken && config.adminBotToken.split(':')[0] === botId) {
+        const { setupAdminBot } = require('./admin-bot');
+        const bot = createBot(config.adminBotToken, knownBotInfo(botId, config.adminBotUsername));
+        return buildEntry(ADMIN_KEY, bot, setupAdminBot);
     }
-    const candidates = await prisma.master.findMany({
-        where: { botId: { not: null }, botToken: { not: null } },
-        select: { id: true, botId: true }
-    });
-    const match = candidates.find(m => hookIdFor(m.botId) === hookId);
-    if (!match) return null;
-    const master = await prisma.master.findUnique({ where: { id: match.id } });
+    const master = await prisma.master.findUnique({ where: { botId: BigInt(botId) } });
+    if (!master?.botToken) return null;
     const { setupMasterBot } = require('./bot-handlers');
-    const bot = createBot(decrypt(master.botToken, config.encryptionKey), knownBotInfo(master.botId, master.botUsername));
-    return register(master.id, bot, b => setupMasterBot(b, master.id), () => onMasterBotDead(master.id));
+    const bot = createBot(decrypt(master.botToken, config.encryptionKey), knownBotInfo(botId, master.botUsername));
+    return buildEntry(master.id, bot, b => setupMasterBot(b, master.id), () => markBotDead(master.id));
 }
 
 /** Вызов из Fastify-маршрута вебхука. Возвращает false, если хук/секрет неверны. */
 async function handleWebhook(hookId, secretHeader, update) {
-    const entry = hooks.get(hookId) || (config.serverless ? await wake(hookId) : null);
-    const given = Buffer.from(String(secretHeader || ''));
-    const expected = Buffer.from(entry?.secret || '');
-    if (!entry || given.length !== expected.length || !crypto.timingSafeEqual(given, expected)) {
-        return false;
-    }
+    const botId = verifyHook(hookId, secretHeader);
+    if (!botId) return false;
+    const entry = config.serverless ? await wake(botId) : hooks.get(hookId);
+    if (!entry) return false;
+
     if (entry.seen.includes(update.update_id)) return true; // повтор от Telegram
     entry.seen.push(update.update_id);
     if (entry.seen.length > DEDUP_SIZE) entry.seen.shift();
@@ -177,17 +185,26 @@ async function handleWebhook(hookId, secretHeader, update) {
 
 // ---------- Боты мастеров ----------
 
-async function onMasterBotDead(masterId) {
+/**
+ * Токен бота мастера больше не действует (мастер отозвал его в BotFather):
+ * отключаем бота, чтобы панель предложила подключить заново, и сообщаем владельцу.
+ */
+async function markBotDead(masterId) {
+    await stop(masterId).catch(() => {});
     const master = await prisma.master.findUnique({ where: { id: masterId } });
-    if (!master) return;
+    if (!master?.botToken) return;
+    await prisma.master.updateMany({
+        where: { id: masterId, botToken: master.botToken },
+        data: { botToken: null, botUsername: null, botId: null }
+    });
     const { notifyAdmin } = require('./admin-bot');
-    notifyAdmin(`⚠️ Бот мастера ${master.name} (@${master.botUsername}) перестал работать: токен недействителен. Мастеру нужно подключить бота заново в панели.`);
+    notifyAdmin(`⚠️ Бот мастера ${master.name} (@${master.botUsername}) перестал работать: токен недействителен. Бот отключён — нужно подключить его заново в панели мастера.`);
 }
 
 async function startMasterBot(master) {
     const { setupMasterBot } = require('./bot-handlers');
     const token = decrypt(master.botToken, config.encryptionKey);
-    const entry = await launch(master.id, token, bot => setupMasterBot(bot, master.id), () => onMasterBotDead(master.id));
+    const entry = await launch(master.id, token, bot => setupMasterBot(bot, master.id), () => markBotDead(master.id));
     await configureMasterBot(entry.bot, master);
     return entry;
 }
@@ -216,7 +233,7 @@ async function startAll() {
             await startMasterBot(master);
         } catch (err) {
             console.error(`[bot] не удалось запустить бота мастера ${master.name}:`, err.message);
-            if (isUnauthorized(err)) onMasterBotDead(master.id);
+            if (isUnauthorized(err)) markBotDead(master.id);
         }
     }
     console.log(`[bot] запущено ботов мастеров: ${[...bots.keys()].filter(k => k !== ADMIN_KEY).length}`);
@@ -226,23 +243,22 @@ async function stopAll() {
     await Promise.all([...bots.keys()].map(stop));
 }
 
+let adminApi;
+
 /** Api для отправки сообщений от имени бота (key = id мастера или 'admin'), null — бота нет */
 async function getApi(key) {
     const running = bots.get(key);
     if (running) return running.bot.api;
     if (!config.serverless) return null;
-    if (apis.has(key)) return apis.get(key);
 
-    let token = null;
     if (key === ADMIN_KEY) {
-        token = config.adminBotToken || null;
-    } else {
-        const master = await prisma.master.findUnique({ where: { id: key }, select: { botToken: true } });
-        token = master?.botToken ? decrypt(master.botToken, config.encryptionKey) : null;
+        // Токен бота владельца задан в окружении и не меняется без передеплоя — можно кэшировать
+        if (!config.adminBotToken) return null;
+        adminApi ||= createBot(config.adminBotToken).api;
+        return adminApi;
     }
-    const api = token ? createBot(token).api : null;
-    apis.set(key, api);
-    return api;
+    const master = await prisma.master.findUnique({ where: { id: key }, select: { botToken: true } });
+    return master?.botToken ? createBot(decrypt(master.botToken, config.encryptionKey)).api : null;
 }
 
 /** Подключён ли бот мастера и может ли он отправлять сообщения */
@@ -270,6 +286,6 @@ async function ensureAdminWebhook() {
 }
 
 module.exports = {
-    launch, stop, stopAll, startAll, startMasterBot, handleWebhook, ensureAdminWebhook,
-    getApi, isActive, activeCount, isUnauthorized, createBot, miniAppUrl, panelUrl, ADMIN_KEY
+    launch, stop, stopAll, startAll, startMasterBot, handleWebhook, ensureAdminWebhook, markBotDead,
+    getApi, isActive, activeCount, isUnauthorized, createBot, miniAppUrl, panelUrl, hookIdFor, ADMIN_KEY
 };
