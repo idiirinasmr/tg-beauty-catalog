@@ -79,7 +79,7 @@ Fastify + Prisma (Postgres/Supabase) + grammy. Один процесс: API, р�
 cd server
 node scripts/dev-db.js     # локальная БД PGlite на 127.0.0.1:54329, держать открытой
 npm run dev                # http://localhost:3000/admin/  (DEV_LOGIN=1: вход по Telegram ID)
-npm test                   # 33 теста
+npm test                   # 40 тестов
 ```
 Первичная настройка (`.env`, ключ, миграции) и деплой на VPS описаны в [server/README.md](server/README.md).
 
@@ -99,6 +99,12 @@ npm test                   # 33 теста
 из панели платформы. Подробно — [docs/DECISIONS.md](docs/DECISIONS.md).
 
 Лимиты задаются в `server/src/config.js` (`freeLimits`). Когда Pro заканчивается, данные не удаляются: каталог просто показывает первые 5 услуг и 6 фото.
+
+## Хостинг
+
+Сейчас — **Vercel**, проект `krasa-platform` (https://krasa-platform.vercel.app). Сервер сам переходит в режим
+serverless (`config.serverless`): `api/index.js` → `server/src/vercel.js`, расписание — `/api/cron/*`.
+Не полагаться на состояние в памяти процесса: на Vercel его нет между запросами. Подробно — [server/README.md](server/README.md).
 
 ## Статус (26.10.2026)
 

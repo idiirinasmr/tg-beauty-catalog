@@ -20,7 +20,7 @@ npm run generate-key          # создаёт файл ключа и печат
 node scripts/dev-db.js        # локальная БД (PGlite) на 127.0.0.1:54329 — оставить открытым
 npx prisma migrate deploy     # создать таблицы
 npm run dev                   # http://localhost:3000/admin/
-npm test                      # 25 интеграционных тестов (нужна запущенная dev-db)
+npm test                      # 40 тестов, в т.ч. режим Vercel (нужна запущенная dev-db)
 ```
 
 Для локальной БД в `.env`:
@@ -31,7 +31,36 @@ DIRECT_URL=<то же самое>
 
 С `DEV_LOGIN=1` на странице входа появляется поле «Telegram ID» — вход без Telegram.
 
-## Продакшен (VPS на Бегете)
+## Продакшен на Vercel (сейчас)
+
+Проект **krasa-platform** → https://krasa-platform.vercel.app (аккаунт idiirinasmr).
+Тот же код, что и для VPS, но в режиме serverless (`config.serverless`, включается сам на Vercel):
+
+| Что | Как на Vercel |
+|---|---|
+| API и вебхуки | функция `api/index.js` → `server/src/vercel.js` (Fastify) |
+| Панели и Mini App | статика из `public/` (собирает `server/scripts/build-vercel.js`) |
+| Боты | только вебхуки; бот «просыпается» на каждое сообщение по `bot_id` из адреса |
+| Каждые 5 минут (напоминания, отзывы, рассылки) | Supabase pg_cron → `POST /api/cron/tick` |
+| Раз в день 21:00 МСК (подписки, отчёт) | Vercel Cron → `GET /api/cron/daily` (`vercel.json`) |
+| Фото | только Supabase Storage (`SUPABASE_SERVICE_KEY` обязателен) |
+| Ключ шифрования | переменная `ENCRYPTION_KEY` (на VPS — файл) |
+| Бэкапы | средствами Supabase; `backup.sh` и алерт о бэкапе на Vercel не работают |
+
+**Настройки** лежат в Vercel (Settings → Environment Variables, только Production).
+Резервная копия — `server/secrets/vercel.env` (не в git). ⚠️ `ENCRYPTION_KEY` из неё сохранить в
+пароль-менеджер: без него сохранённые токены ботов мастеров не расшифровать.
+
+**Первый запуск:**
+1. Добавить в Vercel `DATABASE_URL` (pooler 6543 + `?pgbouncer=true&connection_limit=1`), `DIRECT_URL` (5432),
+   `SUPABASE_SERVICE_KEY`; в Supabase Storage создать публичный бакет `media`.
+2. `vercel deploy --prod` из корня репозитория — сборка сама применит миграции.
+3. Расписание раз в 5 минут:
+   `APP_URL=https://krasa-platform.vercel.app CRON_SECRET=... DIRECT_URL=... node server/scripts/setup-supabase-cron.js`
+4. @BotFather → `/setdomain` → бот владельца → `krasa-platform.vercel.app` (без этого не работает кнопка входа).
+5. Открыть любой адрес `/api/cron/tick` не нужно: первый же запуск расписания поставит вебхук бота владельца.
+
+## Продакшен (VPS на Бегете — позже)
 
 1. **Supabase**: Project Settings → Database → строки подключения
    - `DATABASE_URL` — pooler, порт 6543, добавить `?pgbouncer=true`
