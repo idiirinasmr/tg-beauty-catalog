@@ -108,6 +108,8 @@ serverless (`config.serverless`): `api/index.js` → `server/src/vercel.js`, р�
 
 ## Статус (27.10.2026)
 
-Платформа опубликована: https://krasa-platform.vercel.app (ветка `feature/saas-platform`, на GitHub; в master не смёржена).
+Платформа опубликована: https://krasa-platform.vercel.app. Весь код — в `master` (PR #1 смёржен).
 Публикация — `vercel deploy --prod` из корня (проект не подключён к GitHub, деплой из CLI).
+Push в `master` также обновляет демо на GitHub Pages (`.github/workflows/deploy.yml`, папка `tg-app/`).
 Продакшен-секреты — в Vercel и в `server/secrets/vercel.env` (не в git). Не хватает: магазина ЮKassa, VPS и домена (отложены).
+**С чего продолжать** — раздел «▶ Продолжить отсюда» в начале [WORK-LOG.md](WORK-LOG.md).

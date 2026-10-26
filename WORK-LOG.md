@@ -1,15 +1,34 @@
-# Лог работ — Telegram Mini App (Каталог услуг)
+# Лог работ — BeautyApp: SaaS-платформа для бьюти-мастеров в Telegram
 
 **Дата начала:** 12 марта 2026
 
-## Информация о проекте
-- **Название:** Telegram Mini App — Каталог услуг бьюти-мастера
-- **Папка:** `tg-app/`
-- **Основные файлы:**
-  - `tg-app/app.js` — логика (услуги, мастер, навигация)
-  - `tg-app/index.html` — 4 экрана (каталог, детали, подтверждение, успех)
-  - `tg-app/style.css` — стили с поддержкой тем Telegram
-  - `tg-app/img/` — папка для фото услуг
+## ▶ Продолжить отсюда (обновлено 27.10.2026)
+
+**Где мы сейчас:** платформа готова и работает в интернете. Весь код — в ветке `master` на GitHub.
+
+| Что | Где |
+|---|---|
+| Панель владельца | https://krasa-platform.vercel.app/platform/ (вход через Telegram или @Krasadminbot → «Панель платформы») |
+| Панель мастера | https://krasa-platform.vercel.app/admin/ |
+| Каталог мастера (Mini App) | https://krasa-platform.vercel.app/app/?bot=USERNAME_БОТА |
+| Демо для клиентов | https://t.me/Krasa555bot и https://idiirinasmr.github.io/tg-beauty-catalog/ |
+| Код | https://github.com/idiirinasmr/tg-beauty-catalog (ветка `master`) |
+| Хостинг | Vercel, проект `krasa-platform` (аккаунт idiirinasmr) |
+| База и фото | Supabase, проект `beauty-saas` |
+| Пароли и ключи | Vercel → Settings → Environment Variables; копия — `server/secrets/vercel.env` (только на этом компьютере, не на GitHub) |
+
+**Как обновить сайт после правок:** `vercel deploy --prod` из корня проекта (Vercel не подключён к GitHub — публикует Claude из CLI).
+**Как запустить локально:** см. `CLAUDE.md` → «Как запустить локально».
+
+**Следующие шаги (по приоритету):**
+1. Реквизиты для оплаты переводом (`MANUAL_PAYMENT_DETAILS` в Vercel) — сейчас заглушка «уточните у администратора»
+2. Найти первого мастера и провести его «под ключ» через панель платформы (инструкция — в самой панели)
+3. Магазин ЮKassa — когда появится (`YUKASSA_SHOP_ID`, `YUKASSA_SECRET_KEY` + URL уведомлений)
+4. Юридическое: 152-ФЗ, оферта, политика конфиденциальности
+5. Потом: VPS на Бегете и свой домен (переезд — `server/README.md`), Stripe
+
+**Если сайт не открывается:** скорее всего уснул бесплатный Supabase (засыпает после недели без запросов) —
+открыть https://supabase.com/dashboard/project/gfylphystvksjlfwqnbp и нажать «Restore» / «Восстановить».
 
 ---
 
@@ -111,6 +130,10 @@
 - Supabase-проект beauty-saas был на паузе — разбужен; таблицы созданы; бакет `media`
 - **Опубликовано: https://krasa-platform.vercel.app** — /admin/ (мастер), /platform/ (владелец), /app/?bot=… (каталог)
 - Проверки: 41 тест; code-review (все находки исправлены); проверка опубликованного сайта в браузере
+
+### 27.10.2026 — Порядок в GitHub
+- Цена «под ключ» — «Обсуждается»; кнопка входа на сайте включена (@BotFather `/setdomain`); токен Supabase удалён
+- Pull request #1 смёржен: вся платформа теперь в ветке `master`; демо на GitHub Pages обновилось и работает как раньше
 
 ---
 
